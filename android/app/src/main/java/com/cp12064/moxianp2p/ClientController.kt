@@ -12,13 +12,11 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-// gomobile bind 生成的类（javapkg=com.cp12064.moxianp2p）
-// import mobile.Client as GoClient
-// import mobile.LogSink as GoLogSink
-// import mobile.Mobile
-import mobile.Client as GoClient
-import mobile.LogSink as GoLogSink
-import mobile.Mobile
+// gomobile bind 生成的类（javapkg=com.cp12064.moxianp2p + go package mobile）
+// 生成的 Java 包名 = <javapkg>.<go_package> = com.cp12064.moxianp2p.mobile
+import com.cp12064.moxianp2p.mobile.Client as GoClient
+import com.cp12064.moxianp2p.mobile.LogSink as GoLogSink
+import com.cp12064.moxianp2p.mobile.Mobile
 
 /**
  * 进程内单例：持有 Go 侧 mobile.Client + 日志流 + 状态
