@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">moxian-p2p</string>
+    <string name="hint_node_id">Node ID 例 phone</string>
+    <string name="hint_server">Server WS 例 ws://139.224.1.83:7788/ws</string>
+    <string name="hint_udp">Server UDP 例 139.224.1.83:7789</string>
+    <string name="hint_token">Token（可选）</string>
+    <string name="hint_pass">Passphrase（双方一致）</string>
+    <string name="hint_forwards">Forwards 一行一条 LOCAL=PEER=TARGET\n例 127.0.0.1:18080=winpc=127.0.0.1:8000</string>
+    <string name="btn_start">启动</string>
+    <string name="btn_stop">停止</string>
+    <string name="btn_test">测试</string>
+    <string name="btn_clear">清空</string>
+    <string name="btn_copy">复制</string>
+    <string name="status_idle">未启动</string>
+    <string name="status_connecting">启动中…</string>
+    <string name="status_connected">已连接</string>
+    <string name="status_running">运行中</string>
+    <string name="copied">日志已复制到剪贴板</string>
+    <string name="cb_mesh">启用 Mesh 自动组网（保活 + 预热连接，耗电略增）</string>
+</resources>

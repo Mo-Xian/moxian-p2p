@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>moxian-p2p 控制台</title>
+<style>
+  body { font: 14px/1.5 -apple-system, "Segoe UI", sans-serif; margin: 24px; background: #0f1220; color: #e6e6e6; }
+  h1 { font-size: 22px; color: #9fd0ff; margin: 0 0 12px; }
+  .meta { color: #8892a6; margin-bottom: 16px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #26304a; }
+  th { background: #1a2142; color: #9fd0ff; font-weight: 600; }
+  tr:hover { background: #181c33; }
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; }
+  .cone { background: #1f4b2b; color: #7dffa8; }
+  .symmetric { background: #4b2b1f; color: #ff9f7d; }
+  .unknown { background: #2b2d45; color: #aab0c4; }
+  .vip { color: #ffd479; font-family: monospace; }
+  .tag-chip { display:inline-block; padding:1px 6px; margin:0 2px; background:#2a3550; color:#9fd0ff; border-radius:4px; font-size:11px; }
+  code { color: #9fd0ff; }
+</style>
+</head>
+<body>
+<h1>moxian-p2p 控制台</h1>
+<div class="meta">
+  在线节点 <code id="count">0</code>
+  · 自动刷新
+  · <a href="#" onclick="load();return false;" style="color:#9fd0ff">立即刷新</a>
+</div>
+<table>
+  <thead>
+    <tr><th>NodeID</th><th>标签</th><th>描述</th><th>公网地址</th><th>第二 STUN</th><th>NAT</th><th>虚拟 IP</th><th>上线</th></tr>
+  </thead>
+  <tbody id="rows"></tbody>
+</table>
+
+<script>
+async function load() {
+  try {
+    const r = await fetch('/api/nodes');
+    const d = await r.json();
+    document.getElementById('count').textContent = d.count;
+    const tbody = document.getElementById('rows');
+    tbody.innerHTML = '';
+    for (const n of d.nodes || []) {
+      const tr = document.createElement('tr');
+      const natClass = n.nat_type || 'unknown';
+      const tagHtml = (n.tags || []).map(t => `<span class="tag-chip">${escapeHtml(t)}</span>`).join('');
+      const online = n.online_since ? formatAgo(n.online_since) : '-';
+      tr.innerHTML = `
+        <td><code>${escapeHtml(n.node_id)}</code></td>
+        <td>${tagHtml || '-'}</td>
+        <td style="color:#aab0c4">${escapeHtml(n.description || '-')}</td>
+        <td>${escapeHtml(n.public_addr || '-')}</td>
+        <td>${escapeHtml(n.public2 || '-')}</td>
+        <td><span class="tag ${natClass}">${natClass}</span></td>
+        <td><span class="vip">${escapeHtml(n.virtual_ip || '-')}</span></td>
+        <td style="color:#8892a6">${online}</td>
+      `;
+      tbody.appendChild(tr);
+    }
+  } catch (e) {
+    console.error(e);
+  }
+}
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function formatAgo(ts) {
+  const now = Math.floor(Date.now()/1000);
+  const d = now - ts;
+  if (d < 60) return d + 's 前';
+  if (d < 3600) return Math.floor(d/60) + 'm 前';
+  if (d < 86400) return Math.floor(d/3600) + 'h 前';
+  return Math.floor(d/86400) + 'd 前';
+}
+load();
+setInterval(load, 5000);
+</script>
+</body>
+</html>

@@ -1,0 +1,22 @@
+[Unit]
+Description=moxian-p2p signaling + relay server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/moxian-server -config /etc/moxian/server.yaml
+Restart=always
+RestartSec=3
+User=nobody
+Group=nobody
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+
+# 安全加固
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

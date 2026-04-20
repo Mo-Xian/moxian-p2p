@@ -1,0 +1,40 @@
+# ========== Go ==========
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+vendor/
+
+# ========== bin/ 产物（可通过 go build 重新生成） ==========
+# 不推编译产物 + APK + wintun.dll（WireGuard 许可 + 太大）
+bin/*
+!bin/.gitkeep
+!bin/*.bat
+
+# ========== Android ==========
+android/.gradle/
+android/build/
+android/app/build/
+android/app/release/
+android/local.properties
+android/.idea/
+android/*.iml
+android/captures/
+android/app/src/main/jniLibs/**/libmoxianclient.so  # 也是产物
+
+# ========== 通用 ==========
+.idea/
+.vscode/
+*.log
+*.iml
+.DS_Store
+Thumbs.db
+
+# ========== 本地实际配置（避免误提交真密码）==========
+# examples/ 下是模板可以提交 其他位置的 yaml 不提交
+/client.yaml
+/server.yaml
+**/etc/moxian/*.yaml

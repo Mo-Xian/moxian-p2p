@@ -1,0 +1,29 @@
+# === moxian-p2p 服务器配置 ===
+# 目标位置: /etc/moxian/server.yaml
+# 启动: moxian-server -config /etc/moxian/server.yaml
+
+# 公网域名或 IP（客户端用来连接中继）
+host: 139.224.1.83
+
+# 监听地址
+ws: ":7788"          # WebSocket 信令
+udp: ":7789"         # STUN 主端口 + 中继
+udp2: ":7790"        # STUN 第二端口（NAT 类型检测）
+stun_extras:         # 额外 STUN 端点（非线性 NAT 预测 可省）
+  - ":7791"
+  - ":7792"
+  - ":7793"
+
+# 全局认证 token 客户端 -token 必须匹配
+token: "your-secret-token-here"
+
+# 启用 wss 填下两项（留空走 ws）
+tls_cert: ""
+tls_key: ""
+
+# Web 管理面板 /admin Basic Auth
+admin_user: admin
+admin_pass: ChangeThisPassword!
+
+# 中继带宽限速（per session）
+relay_limit: "10MB"
