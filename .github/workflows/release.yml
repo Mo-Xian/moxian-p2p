@@ -81,6 +81,9 @@ jobs:
       - name: Build moxian.aar
         run: |
           mkdir -p android/app/libs
+          # gomobile 生成的桥接代码依赖 golang.org/x/mobile/bind 运行时
+          # 动态 go get（不改项目 go.mod 因为项目代码不直接 import）
+          go get golang.org/x/mobile/bind
           gomobile bind \
             -target=android/arm64 \
             -androidapi 24 \
