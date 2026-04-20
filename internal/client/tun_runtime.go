@@ -35,11 +35,20 @@ type tunRuntime struct {
 
 // startTun 启动 TUN（client.go 调用）
 // vip 是决议后的实际 vIP（可能来自 server 分配）
+// Android 模式下 cfg.AndroidTunFD > 0 直接从 fd 构造设备（VpnService 打开的）
 func (c *Client) startTun(ctx context.Context, vip string) error {
 	if vip == "" {
 		return errors.New("virtual_ip required for tun mode")
 	}
-	dev, err := openTunDevice(vip, c.cfg.TunSubnet, c.cfg.TunDev)
+	var (
+		dev tunDevice
+		err error
+	)
+	if c.cfg.AndroidTunFD > 0 {
+		dev, err = openTunDeviceFromFD(int(c.cfg.AndroidTunFD))
+	} else {
+		dev, err = openTunDevice(vip, c.cfg.TunSubnet, c.cfg.TunDev)
+	}
 	if err != nil {
 		return err
 	}

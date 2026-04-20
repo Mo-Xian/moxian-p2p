@@ -5,7 +5,6 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
@@ -14,8 +13,7 @@
         android:theme="@style/Theme.Moxian"
         android:networkSecurityConfig="@xml/network_security_config"
         android:usesCleartextTraffic="true"
-        android:allowBackup="false"
-        android:extractNativeLibs="true">
+        android:allowBackup="false">
 
         <activity
             android:name=".MainActivity"
@@ -29,11 +27,19 @@
             </intent-filter>
         </activity>
 
+        <!-- VpnService 必须声明 BIND_VPN_SERVICE 权限 + intent-filter -->
         <service
-            android:name=".MoxianService"
-            android:enabled="true"
+            android:name=".MoxianVpnService"
+            android:permission="android.permission.BIND_VPN_SERVICE"
             android:exported="false"
-            android:foregroundServiceType="dataSync" />
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="VPN tunnel for P2P mesh networking" />
+            <intent-filter>
+                <action android:name="android.net.VpnService" />
+            </intent-filter>
+        </service>
 
     </application>
 

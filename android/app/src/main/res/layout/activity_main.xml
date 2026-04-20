@@ -139,6 +139,16 @@
                     android:textColorHint="@color/text_secondary"/>
 
                 <EditText
+                    android:id="@+id/et_vip"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="@string/hint_vip"
+                    android:inputType="text"
+                    android:textColor="@color/text_primary"
+                    android:textColorHint="@color/text_secondary"
+                    android:text="10.88.0.10"/>
+
+                <EditText
                     android:id="@+id/et_forwards"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"

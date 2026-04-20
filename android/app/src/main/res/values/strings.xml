@@ -6,6 +6,7 @@
     <string name="hint_udp">Server UDP 例 139.224.1.83:7789</string>
     <string name="hint_token">Token（可选）</string>
     <string name="hint_pass">Passphrase（双方一致）</string>
+    <string name="hint_vip">Virtual IP 例 10.88.0.10 (必填 TUN 模式用)</string>
     <string name="hint_forwards">Forwards 一行一条 LOCAL=PEER=TARGET\n例 127.0.0.1:18080=winpc=127.0.0.1:8000</string>
     <string name="btn_start">启动</string>
     <string name="btn_stop">停止</string>

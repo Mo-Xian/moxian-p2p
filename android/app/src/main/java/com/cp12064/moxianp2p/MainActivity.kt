@@ -6,11 +6,13 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.VpnService
 import android.os.Build
 import android.os.Bundle
 import android.text.method.ScrollingMovementMethod
 import android.view.View
 import android.widget.Toast
+import androidx.activity.result.ActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -33,7 +35,19 @@ class MainActivity : AppCompatActivity() {
 
     private val notifPermLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { /* 拒绝也不影响 Service，只是通知不可见 */ }
+    ) { /* 拒绝也不影响 Service 只是通知不可见 */ }
+
+    // VPN 授权回调
+    private val vpnPermLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result: ActivityResult ->
+        if (result.resultCode == RESULT_OK) {
+            launchVpnService()
+        } else {
+            toast("VPN 授权被拒绝")
+            ClientController.appendLog("[app] 用户拒绝了 VPN 授权")
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -45,7 +59,7 @@ class MainActivity : AppCompatActivity() {
         requestNotificationPermissionIfNeeded()
 
         binding.btnStartStop.setOnClickListener {
-            if (ClientController.isRunning()) stopService() else startService()
+            if (ClientController.isRunning()) stopVpn() else startVpn()
         }
         binding.btnClear.setOnClickListener { binding.tvLog.text = "" }
         binding.btnCopy.setOnClickListener { copyLog() }
@@ -54,7 +68,7 @@ class MainActivity : AppCompatActivity() {
         observeControllerState()
     }
 
-    // ---- 订阅 ClientController 的 flow（重建 Activity 后自动回放最近日志）----
+    // ---- 订阅 ClientController flow ----
     private fun observeControllerState() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -71,7 +85,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // 连接状态可视化
     private fun applyState(st: ClientController.State) {
         when (st) {
             ClientController.State.IDLE -> {
@@ -92,34 +105,77 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // ---- 启停 Service ----
-    private fun startService() {
+    // ---- 启停 VPN ----
+    private fun startVpn() {
         val nodeId = binding.etNodeId.text.toString().trim()
         val server = binding.etServer.text.toString().trim()
         val udp = binding.etUdp.text.toString().trim()
         val pass = binding.etPass.text.toString().trim()
+        val vip = binding.etVip.text.toString().trim()
         if (nodeId.isEmpty() || server.isEmpty() || udp.isEmpty() || pass.isEmpty()) {
             toast("node_id / server / udp / pass 必填")
             return
         }
+        if (vip.isEmpty() || !vip.matches(Regex("""^\d+\.\d+\.\d+\.\d+$"""))) {
+            toast("virtual_ip 必填 例 10.88.0.10")
+            return
+        }
         saveConfig()
-        // 重新打开 Activity 时界面清空，配合 Service 仍在运行的场景需要清掉旧显示
         binding.tvLog.text = ""
-        val cfg = ClientController.Config(
-            nodeId = nodeId,
-            server = server,
-            udp = udp,
-            token = binding.etToken.text.toString().trim(),
-            pass = pass,
-            forwards = parseForwards(binding.etForwards.text.toString()),
-            mesh = binding.cbMesh.isChecked,
-        )
-        val intent = MoxianService.buildIntent(this, cfg)
+
+        // 请求 VPN 授权
+        val prepareIntent = VpnService.prepare(this)
+        if (prepareIntent != null) {
+            ClientController.appendLog("[app] 请求 VPN 授权...")
+            vpnPermLauncher.launch(prepareIntent)
+        } else {
+            launchVpnService()
+        }
+    }
+
+    private fun launchVpnService() {
+        val yaml = buildYaml()
+        val vip = binding.etVip.text.toString().trim()
+        val intent = MoxianVpnService.buildStartIntent(this, yaml, vip)
         ContextCompat.startForegroundService(this, intent)
     }
 
-    private fun stopService() {
-        stopService(Intent(this, MoxianService::class.java))
+    private fun stopVpn() {
+        stopService(Intent(this, MoxianVpnService::class.java))
+    }
+
+    // 把 UI 字段拼成 Go 侧可解析的 yaml 字符串
+    private fun buildYaml(): String {
+        val nodeId = binding.etNodeId.text.toString().trim()
+        val server = binding.etServer.text.toString().trim()
+        val udp = binding.etUdp.text.toString().trim()
+        val token = binding.etToken.text.toString().trim()
+        val pass = binding.etPass.text.toString().trim()
+        val vip = binding.etVip.text.toString().trim()
+        val mesh = binding.cbMesh.isChecked
+        val forwards = parseForwards(binding.etForwards.text.toString())
+
+        val sb = StringBuilder()
+        sb.appendLine("node_id: \"$nodeId\"")
+        sb.appendLine("server: \"$server\"")
+        sb.appendLine("server_udp: \"$udp\"")
+        if (token.isNotEmpty()) sb.appendLine("token: \"$token\"")
+        sb.appendLine("pass: \"$pass\"")
+        sb.appendLine("virtual_ip: \"$vip\"")
+        sb.appendLine("mesh: $mesh")
+        sb.appendLine("verbose: true")
+        if (forwards.isNotEmpty()) {
+            sb.appendLine("forwards:")
+            for (f in forwards) {
+                val parts = f.split("=")
+                if (parts.size == 3) {
+                    sb.appendLine("  - local: \"${parts[0]}\"")
+                    sb.appendLine("    peer: \"${parts[1]}\"")
+                    sb.appendLine("    target: \"${parts[2]}\"")
+                }
+            }
+        }
+        return sb.toString()
     }
 
     // ---- 测试按钮 ----
@@ -168,9 +224,10 @@ class MainActivity : AppCompatActivity() {
         binding.etNodeId.setText(prefs.getString("node_id", "phone"))
         binding.etServer.setText(prefs.getString("server", "ws://139.224.1.83:7788/ws"))
         binding.etUdp.setText(prefs.getString("udp", "139.224.1.83:7789"))
-        binding.etToken.setText(prefs.getString("token", "your-secret-token-here"))
-        binding.etPass.setText(prefs.getString("pass", "shared-secret"))
-        binding.etForwards.setText(prefs.getString("forwards", "127.0.0.1:18080=winpc=127.0.0.1:8000"))
+        binding.etToken.setText(prefs.getString("token", ""))
+        binding.etPass.setText(prefs.getString("pass", ""))
+        binding.etVip.setText(prefs.getString("vip", "10.88.0.10"))
+        binding.etForwards.setText(prefs.getString("forwards", ""))
         binding.cbMesh.isChecked = prefs.getBoolean("mesh", true)
     }
 
@@ -181,6 +238,7 @@ class MainActivity : AppCompatActivity() {
             .putString("udp", binding.etUdp.text.toString().trim())
             .putString("token", binding.etToken.text.toString().trim())
             .putString("pass", binding.etPass.text.toString().trim())
+            .putString("vip", binding.etVip.text.toString().trim())
             .putString("forwards", binding.etForwards.text.toString())
             .putBoolean("mesh", binding.cbMesh.isChecked)
             .apply()
@@ -189,14 +247,14 @@ class MainActivity : AppCompatActivity() {
     private fun parseForwards(raw: String): List<String> =
         raw.lines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }
 
-    // ---- UI 状态（按钮文字 + 输入框禁用由 running 控制；状态文字由 State 决定）----
+    // ---- UI 状态 ----
     private fun setRunningUi(running: Boolean) {
         binding.btnStartStop.text = getString(if (running) R.string.btn_stop else R.string.btn_start)
         binding.btnTest.visibility = if (running) View.VISIBLE else View.GONE
-        val inputs = arrayOf<android.view.View>(
+        val inputs = arrayOf<View>(
             binding.etNodeId, binding.etServer, binding.etUdp,
-            binding.etToken, binding.etPass, binding.etForwards,
-            binding.cbMesh,
+            binding.etToken, binding.etPass, binding.etVip,
+            binding.etForwards, binding.cbMesh,
         )
         inputs.forEach { it.isEnabled = !running }
     }

@@ -34,12 +34,16 @@ jobs:
           CGO_ENABLED: 0
         run: |
           set -e
-          for target in "linux/amd64" "linux/arm64" "windows/amd64" "darwin/amd64"; do
+          for target in "linux/amd64" "linux/arm64" "windows/amd64" "darwin/amd64" "android/arm64"; do
             IFS='/' read -r OS ARCH <<< "$target"
             echo "== $OS/$ARCH =="
-            GOOS=$OS GOARCH=$ARCH go build ./cmd/client
-            if [ "$OS" != "darwin" ]; then
-              GOOS=$OS GOARCH=$ARCH go build ./cmd/server
+            if [ "$OS" = "android" ]; then
+              GOOS=$OS GOARCH=$ARCH go build ./mobile
+            else
+              GOOS=$OS GOARCH=$ARCH go build ./cmd/client
+              if [ "$OS" != "darwin" ]; then
+                GOOS=$OS GOARCH=$ARCH go build ./cmd/server
+              fi
             fi
           done
           echo "all platforms compile OK"

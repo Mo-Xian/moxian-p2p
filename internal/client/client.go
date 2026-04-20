@@ -33,10 +33,13 @@ type Config struct {
 	AllowTargets []string // 空=允许任意；否则仅允许列表中的 host:port
 
 	// TUN 虚拟局域网
-	VirtualIP string // 如 10.88.0.2
+	VirtualIP string // 如 10.88.0.2 或 "auto"
 	TunDev    string // Linux: tun_name，Windows: 组件 ID
 	TunSubnet string // 路由子网掩码位（默认 24）
 	EnableTun bool
+	// Android 专用 由 VpnService 传入的已打开 TUN fd
+	// 非 0 时 startTun 复用此 fd 不自己创建网卡
+	AndroidTunFD int32
 
 	// 节点发现元数据
 	Tags        []string

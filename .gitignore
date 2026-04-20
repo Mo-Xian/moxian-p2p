@@ -37,3 +37,7 @@ Thumbs.db
 /client.yaml
 /server.yaml
 **/etc/moxian/*.yaml
+
+# AAR 产物（由 gomobile bind 生成）
+android/app/libs/*.aar
+android/app/libs/*.jar
