@@ -1,0 +1,45 @@
+name: CI
+
+# 普通 push / PR 触发，只验证编译通过，不发 Release
+# 不跑 Android APK 构建（费时）
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - '.github/workflows/ci.yml'
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache: true
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Build (all platforms)
+        env:
+          CGO_ENABLED: 0
+        run: |
+          set -e
+          for target in "linux/amd64" "linux/arm64" "windows/amd64" "darwin/amd64"; do
+            IFS='/' read -r OS ARCH <<< "$target"
+            echo "== $OS/$ARCH =="
+            GOOS=$OS GOARCH=$ARCH go build ./cmd/client
+            if [ "$OS" != "darwin" ]; then
+              GOOS=$OS GOARCH=$ARCH go build ./cmd/server
+            fi
+          done
+          echo "all platforms compile OK"
