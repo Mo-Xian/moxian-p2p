@@ -59,7 +59,7 @@ object ClientController {
         return try {
             appendLog("[app] launching Go client (fd=$tunFd)")
             val c = Mobile.newClient(yamlConfig, sink)
-            c.start(tunFd.toLong())
+            c.start(tunFd)
             native = c
             _running.value = true
             _state.value = State.CONNECTING
