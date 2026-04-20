@@ -22,11 +22,12 @@ var upgrader = websocket.Upgrader{
 // Signaling 信令服务器
 type Signaling struct {
 	Hub        *Hub
-	Relay      *UDPServer // 用于告知客户端中继地址
-	PublicHost string     // 中继/STUN 对外 host
-	AuthToken  string     // 可选全局 token
-	Stun2Port  int        // 第二个 STUN 端口（用于 NAT 类型检测）
-	StunExtras []int      // 额外 STUN 端口（非线性端口预测用）
+	Relay      *UDPServer    // 用于告知客户端中继地址
+	PublicHost string        // 中继/STUN 对外 host
+	AuthToken  string        // 可选全局 token
+	Stun2Port  int           // 第二个 STUN 端口（用于 NAT 类型检测）
+	StunExtras []int         // 额外 STUN 端口（非线性端口预测用）
+	Allocator  *VIPAllocator // 可选 vIP 自动分配器（nil=不启用 client 必须自带 IP）
 }
 
 // Handle 处理一个 WebSocket 连接
@@ -98,13 +99,29 @@ func (s *Signaling) handleRegister(conn *websocket.Conn, r *http.Request) (*Sess
 	if len(reg.LocalAddrs) == 0 {
 		return nil, errString("missing public_addr in local_addrs[0]")
 	}
+	// vIP 分配：
+	//   reg.VirtualIP == ""      → 不使用 TUN
+	//   reg.VirtualIP == "auto"  → 自动分配
+	//   reg.VirtualIP == "1.2.3.4" → 优先这个（作为 hint 冲突时退让给已分配者）
+	assignedVIP := reg.VirtualIP
+	if s.Allocator != nil && assignedVIP != "" {
+		allocated, allocErr := s.Allocator.Alloc(reg.NodeID, assignedVIP)
+		if allocErr != nil {
+			return nil, fmt.Errorf("alloc vip: %w", allocErr)
+		}
+		if allocated != assignedVIP {
+			log.Printf("[hub] node %s requested vip=%s allocated=%s", reg.NodeID, assignedVIP, allocated)
+		}
+		assignedVIP = allocated
+	}
+
 	sess := &Session{
 		NodeID:      reg.NodeID,
 		Conn:        conn,
 		PublicAddr:  reg.LocalAddrs[0],
 		LocalAddrs:  append([]string(nil), reg.LocalAddrs[1:]...),
 		NatType:     reg.NatType,
-		VirtualIP:   reg.VirtualIP,
+		VirtualIP:   assignedVIP,
 		Tags:        append([]string(nil), reg.Tags...),
 		Description: reg.Description,
 		AllowPeers:  append([]string(nil), reg.AllowPeers...),
@@ -115,11 +132,12 @@ func (s *Signaling) handleRegister(conn *websocket.Conn, r *http.Request) (*Sess
 	}
 
 	ack := protocol.RegisterAck{
-		NodeID:     sess.NodeID,
-		PublicAddr: sess.PublicAddr,
-		ServerTime: time.Now().Unix(),
-		RelayUDP:   s.Relay.PublicEndpoint(s.PublicHost),
-		Stun2UDP:   fmt.Sprintf("%s:%d", s.PublicHost, s.Stun2Port),
+		NodeID:      sess.NodeID,
+		PublicAddr:  sess.PublicAddr,
+		ServerTime:  time.Now().Unix(),
+		RelayUDP:    s.Relay.PublicEndpoint(s.PublicHost),
+		Stun2UDP:    fmt.Sprintf("%s:%d", s.PublicHost, s.Stun2Port),
+		AssignedVIP: assignedVIP,
 	}
 	for _, p := range s.StunExtras {
 		ack.StunExtras = append(ack.StunExtras, fmt.Sprintf("%s:%d", s.PublicHost, p))

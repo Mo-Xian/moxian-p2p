@@ -48,12 +48,13 @@ type Register struct {
 
 // RegisterAck 注册回执
 type RegisterAck struct {
-	NodeID     string   `json:"node_id"`
-	PublicAddr string   `json:"public_addr"` // 服务器看到的该客户端公网 UDP 地址
-	ServerTime int64    `json:"server_time"`
-	RelayUDP   string   `json:"relay_udp"`   // 中继 UDP 端点（host:port）
-	Stun2UDP   string   `json:"stun2_udp"`   // 第二个 STUN 端点（用于 NAT 类型检测）
-	StunExtras []string `json:"stun_extras"` // 额外 STUN 端点（非线性预测用）
+	NodeID      string   `json:"node_id"`
+	PublicAddr  string   `json:"public_addr"` // 服务器看到的该客户端公网 UDP 地址
+	ServerTime  int64    `json:"server_time"`
+	RelayUDP    string   `json:"relay_udp"`   // 中继 UDP 端点（host:port）
+	Stun2UDP    string   `json:"stun2_udp"`   // 第二个 STUN 端点（用于 NAT 类型检测）
+	StunExtras  []string `json:"stun_extras"` // 额外 STUN 端点（非线性预测用）
+	AssignedVIP string   `json:"assigned_vip,omitempty"` // 服务器分配/确认的虚拟 IP（auto 模式用）
 }
 
 // NatUpdate NAT 补充信息（register 后 客户端做多点 STUN 后上报）

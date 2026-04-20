@@ -24,6 +24,11 @@ type FileConfig struct {
 	AdminPass string `yaml:"admin_pass"`
 
 	RelayLimit string `yaml:"relay_limit"` // per-session 中继限速 如 "10MB"
+
+	// 虚拟网子网 例如 "10.88.0.0/24" 留空则不启用 vIP 自动分配
+	VirtualSubnet string `yaml:"virtual_subnet"`
+	// vIP 分配映射持久化路径 留空则仅内存（重启丢失）
+	VIPStore string `yaml:"vip_store"`
 }
 
 // LoadFile 读取 YAML

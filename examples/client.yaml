@@ -17,8 +17,10 @@ description: 节点描述（控制台展示用）
 # ---- 虚拟局域网 TUN ----
 # 分配 vIP 启用后任意节点间可直接访问 (ping/SSH/HTTP/...)
 # 前置条件: Linux/macOS root；Windows 需 wintun.dll 同目录 + 管理员
-# 每个节点必须不同
-virtual_ip: 10.88.0.2
+#
+# 推荐: virtual_ip: auto  让 server 自动分配 同一 node_id 永远拿到相同 IP
+# 也可写具体 IP 如 10.88.0.2（server 尊重并持久化 冲突时会分其他 IP）
+virtual_ip: auto
 tun_subnet: "24"
 
 # ---- 自动组网 ----

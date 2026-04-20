@@ -34,17 +34,18 @@ type tunRuntime struct {
 }
 
 // startTun 启动 TUN（client.go 调用）
-func (c *Client) startTun(ctx context.Context) error {
-	if c.cfg.VirtualIP == "" {
+// vip 是决议后的实际 vIP（可能来自 server 分配）
+func (c *Client) startTun(ctx context.Context, vip string) error {
+	if vip == "" {
 		return errors.New("virtual_ip required for tun mode")
 	}
-	dev, err := openTunDevice(c.cfg.VirtualIP, c.cfg.TunSubnet, c.cfg.TunDev)
+	dev, err := openTunDevice(vip, c.cfg.TunSubnet, c.cfg.TunDev)
 	if err != nil {
 		return err
 	}
 	rt := &tunRuntime{dev: dev, pool: c.pool, client: c}
 	c.tun = rt
-	log.Printf("[tun] device=%s vip=%s", dev.Name(), c.cfg.VirtualIP)
+	log.Printf("[tun] device=%s vip=%s", dev.Name(), vip)
 	go rt.readLoop(ctx)
 	return nil
 }

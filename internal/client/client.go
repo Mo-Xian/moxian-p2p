@@ -95,6 +95,10 @@ type Client struct {
 	pool  *peerPool
 	stats *channelStats
 	mesh  *meshManager
+
+	// TUN 启动懒加载 首次 register 收到 AssignedVIP 后再起
+	tunOnce       sync.Once
+	effectiveVIP  string
 }
 
 func New(cfg Config) (*Client, error) {
@@ -165,11 +169,8 @@ func (c *Client) Run(ctx context.Context) error {
 		if c.cfg.StatsInterval > 0 {
 			go c.startStatsLogger(ctx, c.cfg.StatsInterval)
 		}
-		if c.cfg.EnableTun {
-			if err := c.startTun(ctx); err != nil {
-				log.Printf("[tun] start failed: %v", err)
-			}
-		}
+		// TUN 启动挪到首次注册成功后（见 runOneSession）
+		// 因为 AssignedVIP 要等 server 分配才知道
 		for _, r := range c.cfg.Forwards {
 			rule := r
 			go c.runForward(ctx, rule)
@@ -262,6 +263,25 @@ func (c *Client) runOneSession(ctx context.Context) error {
 	}
 	c.relayAddr = ack.RelayUDP
 	log.Printf("[client] registered id=%s public=%s relay=%s", ack.NodeID, ack.PublicAddr, ack.RelayUDP)
+
+	// vIP 决议：优先 server 分配结果 否则用本地 yaml 值（兼容老 server）
+	if ack.AssignedVIP != "" {
+		c.effectiveVIP = ack.AssignedVIP
+	} else if c.cfg.VirtualIP != "" && c.cfg.VirtualIP != "auto" {
+		c.effectiveVIP = c.cfg.VirtualIP
+	}
+	if c.effectiveVIP != "" && c.effectiveVIP != c.cfg.VirtualIP {
+		log.Printf("[client] assigned vip = %s", c.effectiveVIP)
+	}
+
+	// 懒加载 TUN：只有注册后知道了真实 vIP 才能起网卡
+	if c.cfg.EnableTun && c.effectiveVIP != "" {
+		c.tunOnce.Do(func() {
+			if err := c.startTun(ctx, c.effectiveVIP); err != nil {
+				log.Printf("[tun] start failed: %v", err)
+			}
+		})
+	}
 
 	// NAT 采样（重连时每次都做，保持新鲜）
 	samples := []string{c.publicAddr}

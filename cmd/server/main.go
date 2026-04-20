@@ -22,6 +22,8 @@ func main() {
 	adminUser := flag.String("admin-user", "", "Web 管理面板 Basic Auth 用户名（留空=关闭面板）")
 	adminPass := flag.String("admin-pass", "", "Web 管理面板密码")
 	relayLimit := flag.String("relay-limit", "", "中继每 session 限速 例 10MB/s（空=不限）")
+	virtualSubnet := flag.String("virtual-subnet", "", "虚拟网 CIDR 例 10.88.0.0/24（留空=关闭 vIP 自动分配）")
+	vipStore := flag.String("vip-store", "", "vIP 分配持久化文件 例 /var/lib/moxian/vip.json")
 	configFile := flag.String("config", "", "YAML 配置文件路径（CLI flag 优先）")
 	flag.Parse()
 
@@ -63,6 +65,12 @@ func main() {
 		}
 		if *relayLimit == "" {
 			*relayLimit = fc.RelayLimit
+		}
+		if *virtualSubnet == "" {
+			*virtualSubnet = fc.VirtualSubnet
+		}
+		if *vipStore == "" {
+			*vipStore = fc.VIPStore
 		}
 	}
 
@@ -109,6 +117,20 @@ func main() {
 		}
 	}
 
+	var allocator *server.VIPAllocator
+	if *virtualSubnet != "" {
+		a, err := server.NewVIPAllocator(*virtualSubnet, *vipStore)
+		if err != nil {
+			log.Fatalf("vip allocator: %v", err)
+		}
+		allocator = a
+		store := *vipStore
+		if store == "" {
+			store = "(memory)"
+		}
+		log.Printf("[vip] allocator enabled subnet=%s store=%s", *virtualSubnet, store)
+	}
+
 	sig := &server.Signaling{
 		Hub:        server.NewHub(),
 		Relay:      udp,
@@ -116,6 +138,7 @@ func main() {
 		AuthToken:  *token,
 		Stun2Port:  stun2.Port(),
 		StunExtras: extraPorts,
+		Allocator:  allocator,
 	}
 
 	mux := http.NewServeMux()

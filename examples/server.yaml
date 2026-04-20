@@ -27,3 +27,7 @@ admin_pass: ChangeThisPassword!
 
 # 中继带宽限速（per session）
 relay_limit: "10MB"
+
+# 虚拟网 vIP 自动分配（留空禁用 客户端必须自带 virtual_ip）
+virtual_subnet: "10.88.0.0/24"
+vip_store: "/var/lib/moxian/vip.json"   # 持久化分配表 重启不会丢
