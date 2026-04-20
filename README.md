@@ -51,11 +51,52 @@ internal/tunnel   # KCP + smux + TCP 转发
 internal/client   # 客户端主控
 ```
 
-## 构建
+## 下载
+
+预编译二进制在 [Releases](https://github.com/Mo-Xian/moxian-p2p/releases/latest) 页，按平台下载。
+
+| 平台 | Server | Client | 说明 |
+|------|--------|--------|------|
+| Linux amd64 | `moxian-server-linux-amd64` | `moxian-client-linux-amd64` | x86_64 VPS / 服务器 |
+| Linux arm64 | `moxian-server-linux-arm64` | `moxian-client-linux-arm64` | 树莓派 / 甲骨文 ARM / Graviton |
+| Windows amd64 | `moxian-server.exe` | `moxian-client.exe` | Windows 桌面 |
+| macOS amd64 | - | `moxian-client-darwin-amd64` | Mac Intel（Apple Silicon 走 Rosetta） |
+| Android | - | `moxian-p2p-debug.apk` | Android 7.0+（arm64） |
+| Windows TUN 驱动 | - | `wintun.dll` | 用 Windows TUN 模式时 放 exe 同目录 |
+
+**命令行下载示例**（Linux）：
 
 ```bash
-go build -o bin/moxian-server.exe ./cmd/server
-go build -o bin/moxian-client.exe ./cmd/client
+# 替换为 Releases 页最新 tag
+VER=v0.5.1
+curl -LO https://github.com/Mo-Xian/moxian-p2p/releases/download/$VER/moxian-server-linux-amd64
+curl -LO https://github.com/Mo-Xian/moxian-p2p/releases/download/$VER/moxian-client-linux-amd64
+chmod +x moxian-*
+```
+
+配置文件模板见 [`examples/`](examples/)。
+
+## 从源码构建
+
+需要 Go 1.23+：
+
+```bash
+git clone https://github.com/Mo-Xian/moxian-p2p.git
+cd moxian-p2p
+go build -o bin/moxian-server ./cmd/server
+go build -o bin/moxian-client ./cmd/client
+# 交叉编译
+GOOS=linux GOARCH=amd64 go build -o bin/moxian-server-linux-amd64 ./cmd/server
+GOOS=linux GOARCH=arm64 go build -o bin/moxian-client-linux-arm64 ./cmd/client
+```
+
+Android APK（需 Android SDK 34 + JDK 17）：
+
+```bash
+# 先把 arm64 client 放进 jniLibs（APK 通过这个机制嵌入二进制）
+GOOS=linux GOARCH=arm64 go build -o android/app/src/main/jniLibs/arm64-v8a/libmoxianclient.so ./cmd/client
+cd android && ./gradlew assembleDebug
+# 产物: app/build/outputs/apk/debug/app-debug.apk
 ```
 
 ## 部署

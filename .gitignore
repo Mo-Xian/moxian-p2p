@@ -8,8 +8,7 @@
 *.out
 vendor/
 
-# ========== bin/ 产物（可通过 go build 重新生成） ==========
-# 不推编译产物 + APK + wintun.dll（WireGuard 许可 + 太大）
+# ========== bin/ 产物（二进制由 GitHub Releases 分发，源码仓库不提交） ==========
 bin/*
 !bin/.gitkeep
 !bin/*.bat
@@ -23,7 +22,7 @@ android/local.properties
 android/.idea/
 android/*.iml
 android/captures/
-android/app/src/main/jniLibs/**/libmoxianclient.so  # 也是产物
+android/app/src/main/jniLibs/**/libmoxianclient.so
 
 # ========== 通用 ==========
 .idea/
