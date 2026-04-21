@@ -334,6 +334,71 @@ func (c *Client) runOneSession(ctx context.Context) error {
 	return c.readLoop(ctx)
 }
 
+// PeekVIP 做一次短连接 STUN+register 取回 server 分配的 vIP 然后立刻断开
+// 用于 Android 建 VpnService.Builder 前预先知道 vIP
+// 注意: 调用后 client 的 UDP mux 已关闭 不可再使用
+func (c *Client) PeekVIP(ctx context.Context) (string, error) {
+	defer c.mux.Close()
+
+	pub, err := c.mux.Stun(c.cfg.ServerUDP, 5*time.Second)
+	if err != nil {
+		return "", fmt.Errorf("stun: %w", err)
+	}
+	c.publicAddr = pub.String()
+
+	u, err := url.Parse(c.cfg.ServerURL)
+	if err != nil {
+		return "", err
+	}
+	dialCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	ws, _, err := websocket.DefaultDialer.DialContext(dialCtx, u.String(), nil)
+	if err != nil {
+		return "", fmt.Errorf("ws dial: %w", err)
+	}
+	defer ws.Close()
+
+	localAddrs := []string{c.publicAddr}
+	localAddrs = append(localAddrs, collectLocalAddrs(c.mux.LocalPort())...)
+	reg := protocol.Register{
+		NodeID:       c.cfg.NodeID,
+		Token:        c.cfg.Token,
+		Version:      "probe",
+		LocalUDPPort: c.mux.LocalPort(),
+		LocalAddrs:   localAddrs,
+		VirtualIP:    c.cfg.VirtualIP,
+		Tags:         c.cfg.Tags,
+		Description:  c.cfg.Description,
+	}
+	regMsg, _ := protocol.Pack(protocol.TypeRegister, "", reg)
+	_ = ws.SetWriteDeadline(time.Now().Add(5 * time.Second))
+	if err := ws.WriteMessage(websocket.TextMessage, regMsg); err != nil {
+		return "", err
+	}
+	_ = ws.SetReadDeadline(time.Now().Add(10 * time.Second))
+	_, raw, err := ws.ReadMessage()
+	if err != nil {
+		return "", err
+	}
+	var ack protocol.RegisterAck
+	env, err := protocol.Unpack(raw, &ack)
+	if err != nil {
+		return "", err
+	}
+	if env.Type == protocol.TypeError {
+		var emsg protocol.ErrorMsg
+		_ = json.Unmarshal(env.Payload, &emsg)
+		return "", fmt.Errorf("server rejected: %s %s", emsg.Code, emsg.Message)
+	}
+	if env.Type != protocol.TypeRegisterAck {
+		return "", fmt.Errorf("unexpected response type: %s", env.Type)
+	}
+	if ack.AssignedVIP == "" {
+		return "", errors.New("server did not assign vip (server 未配 virtual_subnet?)")
+	}
+	return ack.AssignedVIP, nil
+}
+
 func (c *Client) readLoop(ctx context.Context) error {
 	for {
 		if ctx.Err() != nil {

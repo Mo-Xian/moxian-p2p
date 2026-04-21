@@ -20,6 +20,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/cp12064/moxian-p2p/internal/client"
 	"github.com/cp12064/moxian-p2p/internal/debug"
@@ -118,7 +119,39 @@ func (c *Client) Stop() {
 func (c *Client) IsRunning() bool { return c.running.Load() }
 
 // Version 获取 Go 端版本字符串（方便 Kotlin 侧展示）
-func Version() string { return "0.5.2-mobile" }
+func Version() string { return "0.6.0-mobile" }
+
+// PrepareVip 做一次短连接 STUN + WS 注册 返回 server 分配的 vIP
+// 用于 Android 建 VpnService.Builder 前拿到真实 vIP
+// 由于同一 node_id 在 server 持久化 后续 Start 注册会拿到同一 vIP
+//
+// 阻塞调用 建议在 Kotlin 协程 IO 线程上跑
+func PrepareVip(yamlConfig string) (string, error) {
+	if strings.TrimSpace(yamlConfig) == "" {
+		return "", errors.New("empty yaml")
+	}
+	var fc client.FileConfig
+	if err := yaml.Unmarshal([]byte(yamlConfig), &fc); err != nil {
+		return "", fmt.Errorf("parse yaml: %w", err)
+	}
+	var cfg client.Config
+	fc.ApplyTo(&cfg)
+	// 仅做 probe 不启动其他功能
+	cfg.EnableTun = false
+	cfg.EnableMesh = false
+	cfg.Forwards = nil
+	if cfg.VirtualIP == "" {
+		cfg.VirtualIP = "auto"
+	}
+
+	tmp, err := client.New(cfg)
+	if err != nil {
+		return "", err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	return tmp.PeekVIP(ctx)
+}
 
 // sinkWriter 把 log 包的输出转发给 Kotlin 的 LogSink
 type sinkWriter struct{ sink LogSink }

@@ -37,12 +37,17 @@ class MainActivity : AppCompatActivity() {
         ActivityResultContracts.RequestPermission()
     ) { /* 拒绝也不影响 Service 只是通知不可见 */ }
 
+    // auto 模式下 probe 到的 vip 等 VPN 授权通过后用
+    @Volatile private var pendingVip: String? = null
+
     // VPN 授权回调
     private val vpnPermLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result: ActivityResult ->
-        if (result.resultCode == RESULT_OK) {
-            launchVpnService()
+        val vip = pendingVip
+        pendingVip = null
+        if (result.resultCode == RESULT_OK && vip != null) {
+            launchVpnService(vip)
         } else {
             toast("VPN 授权被拒绝")
             ClientController.appendLog("[app] 用户拒绝了 VPN 授权")
@@ -111,31 +116,62 @@ class MainActivity : AppCompatActivity() {
         val server = binding.etServer.text.toString().trim()
         val udp = binding.etUdp.text.toString().trim()
         val pass = binding.etPass.text.toString().trim()
-        val vip = binding.etVip.text.toString().trim()
+        val vipField = binding.etVip.text.toString().trim()
         if (nodeId.isEmpty() || server.isEmpty() || udp.isEmpty() || pass.isEmpty()) {
             toast("node_id / server / udp / pass 必填")
             return
         }
-        if (vip.isEmpty() || !vip.matches(Regex("""^\d+\.\d+\.\d+\.\d+$"""))) {
-            toast("virtual_ip 必填 例 10.88.0.10")
+        if (vipField.isEmpty() ||
+            (vipField != "auto" && !vipField.matches(Regex("""^\d+\.\d+\.\d+\.\d+$"""))))  {
+            toast("virtual_ip 必须是 auto 或 x.x.x.x")
             return
         }
         saveConfig()
         binding.tvLog.text = ""
 
-        // 请求 VPN 授权
-        val prepareIntent = VpnService.prepare(this)
-        if (prepareIntent != null) {
-            ClientController.appendLog("[app] 请求 VPN 授权...")
-            vpnPermLauncher.launch(prepareIntent)
+        if (vipField == "auto") {
+            // 先 probe 拿 server 分配的 IP
+            probeThenLaunch()
         } else {
-            launchVpnService()
+            requestVpnThenLaunch(vipField)
         }
     }
 
-    private fun launchVpnService() {
+    private fun probeThenLaunch() {
+        binding.btnStartStop.isEnabled = false
+        ClientController.appendLog("[app] 正在向 server 请求分配虚拟 IP...")
+        lifecycleScope.launch {
+            val vip = withContext(Dispatchers.IO) {
+                try {
+                    com.cp12064.moxianp2p.mobile.Mobile.prepareVip(buildYaml())
+                } catch (e: Throwable) {
+                    ClientController.appendLog("[app] prepareVip failed: ${e.message}")
+                    null
+                }
+            }
+            binding.btnStartStop.isEnabled = true
+            if (vip.isNullOrBlank()) {
+                toast("获取 vip 失败（确认 server 已配置 virtual_subnet）")
+                return@launch
+            }
+            ClientController.appendLog("[app] 分配到 vip = $vip")
+            requestVpnThenLaunch(vip)
+        }
+    }
+
+    private fun requestVpnThenLaunch(vip: String) {
+        val prepareIntent = VpnService.prepare(this)
+        if (prepareIntent != null) {
+            pendingVip = vip
+            ClientController.appendLog("[app] 请求 VPN 授权...")
+            vpnPermLauncher.launch(prepareIntent)
+        } else {
+            launchVpnService(vip)
+        }
+    }
+
+    private fun launchVpnService(vip: String) {
         val yaml = buildYaml()
-        val vip = binding.etVip.text.toString().trim()
         val intent = MoxianVpnService.buildStartIntent(this, yaml, vip)
         ContextCompat.startForegroundService(this, intent)
     }
@@ -226,7 +262,7 @@ class MainActivity : AppCompatActivity() {
         binding.etUdp.setText(prefs.getString("udp", "139.224.1.83:7789"))
         binding.etToken.setText(prefs.getString("token", ""))
         binding.etPass.setText(prefs.getString("pass", ""))
-        binding.etVip.setText(prefs.getString("vip", "10.88.0.10"))
+        binding.etVip.setText(prefs.getString("vip", "auto"))
         binding.etForwards.setText(prefs.getString("forwards", ""))
         binding.cbMesh.isChecked = prefs.getBoolean("mesh", true)
     }

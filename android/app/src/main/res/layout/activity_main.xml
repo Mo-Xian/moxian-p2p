@@ -146,7 +146,7 @@
                     android:inputType="text"
                     android:textColor="@color/text_primary"
                     android:textColorHint="@color/text_secondary"
-                    android:text="10.88.0.10"/>
+                    android:text="auto"/>
 
                 <EditText
                     android:id="@+id/et_forwards"
