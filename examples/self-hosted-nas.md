@@ -5,6 +5,7 @@
 ## 目录
 
 - [硬件参考](#硬件参考)
+- [零成本预演（无硬件时的测试方案）](#零成本预演无硬件时的测试方案)
 - [系统底座](#1-系统底座debian-12)
 - [存储：RAID + 挂载](#2-存储raid-1--ext4)
 - [CasaOS 管理面板](#3-casaos管理面板)
@@ -28,6 +29,242 @@
 | 进阶 | N100 主机（双 M.2 + SATA）+ 16G + 2×8T + NVMe 缓存 | 多用户 + 影视转码 |
 
 硬盘建议 **西数红盘 Pro / 希捷酷狼**（CMR 不要 SMR）。
+
+---
+
+## 零成本预演（无硬件时的测试方案）
+
+还没买硬件？先用 **家里已有的 Windows 笔记本** 完整跑一遍本方案，验证功能和操作流程。等熟悉了再决定要不要上二手主机。
+
+三条路线，按"贴近真实程度"从低到高：
+
+| 方案 | 起步时间 | 贴近真机 | 适合 |
+|------|---------|---------|------|
+| A. WSL2 + Docker | 10 分钟 | ★★★ | 只测应用栈（Immich/Jellyfin/moxian）|
+| B. Hyper-V / VirtualBox 虚拟机 | 1 小时 | ★★★★★ | 完整预演 含 RAID、systemd、Samba |
+| C. Docker Desktop（裸 Windows）| 5 分钟 | ★★ | 极速体验单个应用 |
+
+**推荐路径**：WSL2 快速试水 → 虚拟机完整预演 → 迁移到真机
+
+### 方案 A：WSL2（推荐快速测试）
+
+零配置，Linux 生态全套可用，和真 Debian NAS 体验几乎一致。
+
+#### A.1 安装 WSL2 Debian
+
+```powershell
+# 管理员 PowerShell
+wsl --install -d Debian
+# 重启后自动进入 Debian shell 设置用户名密码
+```
+
+#### A.2 WSL 内装 Docker + 基础工具
+
+```bash
+# Debian WSL 里执行
+sudo apt update && sudo apt upgrade -y
+sudo apt install -y docker.io docker-compose-v2 curl git
+sudo usermod -aG docker $USER
+
+# 退出重进 WSL 生效
+exit
+# PowerShell: wsl -d Debian
+
+# 验证
+docker run --rm hello-world
+```
+
+#### A.3 一键拉起核心应用栈（Immich + Jellyfin + qBittorrent）
+
+```bash
+mkdir -p ~/nas-test/{photos,media,downloads,appdata}
+cd ~/nas-test
+
+cat > docker-compose.yml <<'EOF'
+# 测试专用 简化版 NAS 应用栈
+services:
+  # ---- Immich 相册 ----
+  immich-server:
+    image: ghcr.io/immich-app/immich-server:release
+    ports: ["2283:2283"]
+    environment:
+      UPLOAD_LOCATION: /usr/src/app/upload
+      DB_HOSTNAME: immich-db
+      DB_USERNAME: postgres
+      DB_PASSWORD: testpassword
+      DB_DATABASE_NAME: immich
+      REDIS_HOSTNAME: immich-redis
+    volumes:
+      - ./photos:/usr/src/app/upload
+    depends_on: [immich-db, immich-redis, immich-ml]
+    restart: unless-stopped
+
+  immich-ml:
+    image: ghcr.io/immich-app/immich-machine-learning:release
+    volumes:
+      - ./appdata/immich-ml:/cache
+    restart: unless-stopped
+
+  immich-redis:
+    image: docker.io/redis:6.2-alpine
+    restart: unless-stopped
+
+  immich-db:
+    image: docker.io/tensorchord/pgvecto-rs:pg14-v0.2.0
+    environment:
+      POSTGRES_PASSWORD: testpassword
+      POSTGRES_USER: postgres
+      POSTGRES_DB: immich
+    volumes:
+      - ./appdata/immich-db:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  # ---- Jellyfin 影视 ----
+  jellyfin:
+    image: jellyfin/jellyfin:latest
+    ports: ["8096:8096"]
+    volumes:
+      - ./appdata/jellyfin/config:/config
+      - ./appdata/jellyfin/cache:/cache
+      - ./media:/media:ro
+    restart: unless-stopped
+
+  # ---- qBittorrent 下载 ----
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    ports:
+      - "8081:8081"
+      - "6881:6881"
+      - "6881:6881/udp"
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      WEBUI_PORT: "8081"
+    volumes:
+      - ./appdata/qbittorrent:/config
+      - ./downloads:/downloads
+    restart: unless-stopped
+EOF
+
+docker compose up -d
+docker compose ps
+```
+
+首次拉镜像约 3-5G，耐心等。完成后：
+
+- Immich: `http://localhost:2283`（首次注册管理员账号）
+- Jellyfin: `http://localhost:8096`
+- qBittorrent: `http://localhost:8081`（默认账号 `admin` / 密码见 `docker logs qbittorrent`）
+
+#### A.4 让局域网其他设备也能访问（可选）
+
+WSL2 默认 NAT 模式，服务只监听 WSL 内部 IP。Windows 端口转发一下：
+
+```powershell
+# 管理员 PowerShell
+$wslIp = (wsl hostname -I).Trim()
+foreach ($port in 2283,8096,8081) {
+  netsh interface portproxy add v4tov4 listenport=$port listenaddress=0.0.0.0 connectport=$port connectaddress=$wslIp
+}
+# 防火墙放行
+New-NetFirewallRule -DisplayName "WSL NAS" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 2283,8096,8081
+```
+
+局域网其他设备 `http://<笔记本 IP>:2283` 即可访问。
+
+> **注意**：WSL 每次重启 IP 可能变，需要重跑 portproxy。可以写个启动脚本自动化。
+
+#### A.5 在 WSL 里跑 moxian-p2p
+
+```bash
+cd ~/nas-test
+wget https://github.com/Mo-Xian/moxian-p2p/releases/latest/download/moxian-client-linux-amd64
+chmod +x moxian-client-linux-amd64
+
+# 从 examples/client.yaml 改一份 改 node_id / server / passphrase
+cp /path/to/moxian-p2p/examples/client.yaml ./client.yaml
+vim client.yaml
+
+# 前台跑 看日志
+./moxian-client-linux-amd64 -config ./client.yaml -v
+```
+
+成功打通后，手机装 moxian-p2p APP，填相同 passphrase + 不同 node_id，即可通过虚拟 IP 访问 WSL 里的 Jellyfin/Immich。
+
+### 方案 B：Hyper-V 虚拟机（完整预演）
+
+用 VM 跑一台完整 Debian，和真机部署 **100% 一致**，可以把本文档每一步都练一遍。
+
+#### B.1 开启 Hyper-V（Windows 专业版/企业版）
+
+```powershell
+# 管理员 PowerShell
+Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V -All
+# 重启
+```
+
+> Windows 家庭版没 Hyper-V，改用 **VirtualBox**（免费）或 **VMware Workstation Player**（免费非商用）。
+
+#### B.2 创建 VM
+
+- 名称：`nas-test`
+- 代数：第二代
+- 内存：4096 MB（启用动态内存）
+- 网络：新建"外部虚拟交换机"绑定到物理网卡 → VM 在局域网里有独立 IP
+- 虚拟硬盘：40G（系统）+ 两块 10G 盘（模拟 RAID，可选）
+
+挂载 `debian-12-netinst.iso`，开机安装。
+
+#### B.3 按本文档完整走一遍
+
+VM 装好 Debian 后，从本文档 [1. 系统底座](#1-系统底座debian-12) 开始照做，RAID 那步用两块 10G 虚拟盘练手。
+
+**优势**：
+- 随时快照，操作失败回滚
+- 和真机一模一样的环境，文档里每条命令都能验证
+- 笔记本休眠时 VM 保存状态，恢复继续
+
+#### B.4 迁移到真机
+
+VM 里的 `/mnt/pool/appdata/` 直接 rsync 到真机：
+
+```bash
+# 在真机上
+rsync -avP --rsh=ssh user@<笔记本 IP>:/mnt/pool/appdata/ /mnt/pool/appdata/
+
+# Docker 容器在新机器上重新 docker compose up -d
+# 数据卷指向同路径 应用自动识别历史数据
+```
+
+### 方案 C：Docker Desktop（最快体验）
+
+装 [Docker Desktop for Windows](https://www.docker.com/products/docker-desktop)，把上面 A.3 的 `docker-compose.yml` 里路径改成 Windows 盘符：
+
+```yaml
+volumes:
+  - D:/nas-test/photos:/usr/src/app/upload
+```
+
+`docker compose up -d` 即可。**缺点**：没法装 CasaOS，Samba/Immich 的性能比 WSL 低一截，仅适合快速看单个应用长什么样。
+
+### 笔记本长期当 NAS 的避坑
+
+测试阶段用完即撤最干净。如果想接着用笔记本做临时 NAS：
+
+| 坑 | 解决 |
+|----|------|
+| 合盖休眠 | 设置 → 电源 → "合上盖子时不采取任何操作" |
+| 屏幕一直亮 | 设置 → 电源 → "从不关闭屏幕"但**可以关屏不锁屏** |
+| Windows 强制重启 | 组策略 `gpedit.msc` → 计算机配置 → 管理模板 → Windows 组件 → Windows 更新 → "禁用自动重启" |
+| 单硬盘无冗余 | 外挂 USB 硬盘定时 rsync 镜像（不是实时 RAID）|
+| 长期插电电池鼓包 | Lenovo Vantage / ThinkPad 设电池充电阈值 60-80% |
+| 系统更新触发重启 | `powercfg /h off` 彻底关休眠 + 禁用自动更新 |
+
+### 测试阶段建议路径
+
+1. **Day 1**：方案 A（WSL2）跑通 Immich + Jellyfin + moxian-p2p，手机能备份照片、外网能看电影 ✅
+2. **Day 2-3**：方案 B（Hyper-V VM）完整预演，包括 RAID、Samba、systemd 服务、Restic 备份
+3. **买硬件后**：照 VM 里的笔记直接搬到真机，**半天完工**
 
 ---
 
