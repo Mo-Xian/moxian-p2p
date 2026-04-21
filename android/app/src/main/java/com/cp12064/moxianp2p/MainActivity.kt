@@ -185,7 +185,8 @@ class MainActivity : AppCompatActivity() {
     private fun launchVpnService(vip: String) {
         val yaml = buildYaml()
         val intent = MoxianVpnService.buildStartIntent(this, yaml, vip)
-        ContextCompat.startForegroundService(this, intent)
+        // VpnService 不用 startForegroundService（Android 会自动把它当前台服务）
+        startService(intent)
     }
 
     private fun stopVpn() {

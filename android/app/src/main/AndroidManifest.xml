@@ -4,9 +4,6 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <!-- Android 14+ targetSdk 34 FGS 类型 specialUse 必须声明此权限 -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
@@ -30,15 +27,11 @@
             </intent-filter>
         </activity>
 
-        <!-- VpnService 必须声明 BIND_VPN_SERVICE 权限 + intent-filter -->
+        <!-- VpnService 不需要 foregroundServiceType 系统会自动把它当前台服务 -->
         <service
             android:name=".MoxianVpnService"
             android:permission="android.permission.BIND_VPN_SERVICE"
-            android:exported="false"
-            android:foregroundServiceType="specialUse">
-            <property
-                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="VPN tunnel for P2P mesh networking" />
+            android:exported="false">
             <intent-filter>
                 <action android:name="android.net.VpnService" />
             </intent-filter>
