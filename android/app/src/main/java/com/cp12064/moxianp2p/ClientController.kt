@@ -42,10 +42,13 @@ object ClientController {
     private val sink = object : GoLogSink {
         override fun log(line: String) {
             scope.launch { _logs.emit(line) }
-            // 状态关键字识别
+            // 状态关键字识别 —— 任一路径成功都算 CONNECTED
             when {
                 "[forward]" in line && "established" in line -> _state.value = State.CONNECTED
                 "[responder]" in line && "established" in line -> _state.value = State.CONNECTED
+                "[mesh] connected to" in line -> _state.value = State.CONNECTED
+                "[peerpool] dialed" in line -> _state.value = State.CONNECTED
+                "[peerpool] registered inbound" in line -> _state.value = State.CONNECTED
                 "process exited" in line -> _state.value = State.IDLE
             }
         }

@@ -227,13 +227,53 @@ class MainActivity : AppCompatActivity() {
     }
 
     // ---- 测试按钮 ----
+    // 优先: forward 规则第一条的 local 地址
+    // 否则: 从日志里最近看到的对端 vIP 猜一个 (默认 :80 可手动改)
+    // 最后兜底: 10.88.0.2:80
     private fun runTest() {
         val rules = parseForwards(binding.etForwards.text.toString())
-        if (rules.isEmpty()) { appendLog("[test] no forward rule"); return }
-        val parts = rules.first().split("=")
-        if (parts.size != 3) { appendLog("[test] invalid rule: ${rules.first()}"); return }
-        val url = "http://${parts[0]}/"
-        appendLog("[test] GET $url")
+        val defaultTarget: String = when {
+            rules.isNotEmpty() -> {
+                val parts = rules.first().split("=")
+                if (parts.size == 3) "http://${parts[0]}/" else "http://127.0.0.1:18080/"
+            }
+            else -> {
+                // TUN 模式 从日志里找对端 vIP
+                val peerVip = lastSeenPeerVip() ?: "10.88.0.2"
+                "http://$peerVip:80/"
+            }
+        }
+        promptTestUrl(defaultTarget) { url ->
+            appendLog("[test] GET $url")
+            doTest(url)
+        }
+    }
+
+    private fun lastSeenPeerVip(): String? {
+        // 从日志文本里找 "vip=10.88.0.X" (非自己的 vIP)
+        val self = binding.etVip.text.toString().trim()
+        val pattern = Regex("""vip=(10\.88\.0\.\d+)""")
+        val hits = pattern.findAll(binding.tvLog.text.toString()).map { it.groupValues[1] }.toSet()
+        return hits.firstOrNull { it != self && it != "auto" }
+    }
+
+    private fun promptTestUrl(default: String, onConfirm: (String) -> Unit) {
+        val input = android.widget.EditText(this).apply {
+            setText(default)
+            setSelection(default.length)
+        }
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("测试 URL")
+            .setView(input)
+            .setPositiveButton("GET") { _, _ ->
+                val url = input.text.toString().trim()
+                if (url.isNotEmpty()) onConfirm(url)
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun doTest(url: String) {
         lifecycleScope.launch(Dispatchers.IO) {
             val start = System.currentTimeMillis()
             try {
