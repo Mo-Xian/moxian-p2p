@@ -9,6 +9,7 @@
 - [硬件参考](#硬件参考)
 - [零成本预演（无硬件时的测试方案）](#零成本预演无硬件时的测试方案)
 - [系统底座](#1-系统底座debian-12)
+  - [启动媒介选择（没有 U 盘？）](#111-启动媒介选择)
 - [存储：RAID + 挂载](#2-存储raid-1--ext4)
 - [CasaOS 管理面板](#3-casaos管理面板)
 - [Samba 文件共享](#4-samba文件共享)
@@ -406,9 +407,73 @@ Debian 十年稳定，包最全，社区问题多的全能搜到。
 
 ### 1.1 安装
 
-1. 下载 `debian-12-netinst.iso`，Rufus 烧录 U 盘
-2. 安装时**只勾选 `SSH server` 和 `standard system utilities`**，其他不选
-3. 分区：SSD 全给根分区，HDD 先不分（后面组 RAID）
+1. 下载 `debian-12-netinst.iso`（约 700M，[官网](https://www.debian.org/distrib/)）
+2. 制作启动盘（见 [1.1.1 启动媒介选择](#111-启动媒介选择)）
+3. 目标机器 BIOS / UEFI 里改启动顺序，优先启动盘
+4. 安装时**只勾选 `SSH server` 和 `standard system utilities`**，其他不选
+5. 分区：SSD 全给根分区，HDD 先不分（后面组 RAID）
+
+### 1.1.1 启动媒介选择
+
+手头没有 U 盘？按场景选：
+
+#### 场景 A：虚拟机测试（不需要物理媒介）
+
+Hyper-V / VirtualBox / VMware 里 ISO 直接挂给虚拟光驱：
+
+- **Hyper-V**：VM 设置 → SCSI 控制器 → DVD 驱动器 → 映像文件 → 选 ISO
+- **VirtualBox**：设置 → 存储 → 控制器 IDE → 光盘图标 → 选 ISO
+
+保存后启动 VM 直接进入安装界面。**完全不需要 U 盘、光盘、外置硬盘**，是最省事的方式，也是本文档推荐的预演路径。
+
+#### 场景 B：有 U 盘 ⭐ 最简单
+
+16G U 盘即可（淘宝 10-20 元）。推荐工具：
+
+- **Rufus**（<https://rufus.ie>）Windows 下最好用
+- **balenaEtcher**（<https://www.balena.io/etcher>）跨平台 界面友好
+- **Ventoy**（<https://www.ventoy.net>）装完后直接往 U 盘里丢 ISO 即启动 可以同时装多个系统
+
+操作：U 盘插电脑 → 打开工具 → 选 ISO + U 盘 → 写入（5-10 分钟）→ 拔下插目标机器。
+
+#### 场景 C：只有移动硬盘 / USB 硬盘盒 ⭐ 推荐没 U 盘时用
+
+外置 HDD / SSD 完全能当启动盘，**推荐用 Ventoy**，因为它把硬盘拆成两块：启动区（几十 MB）+ 数据区（剩余全部可用作普通存储）。
+
+**Ventoy 做法**：
+
+1. 备份外置硬盘上所有数据（过程会格式化整块盘）
+2. 下载 Ventoy（<https://www.ventoy.net/cn/download.html>）
+3. Windows 解压 `Ventoy2Disk.exe` 运行：
+   - 选中你的外置硬盘（**注意别选错内置硬盘**）
+   - 点 "安装"
+4. 安装完成后，硬盘多出一个分区可当普通盘用（FAT32/exFAT 格式）
+5. 把 `debian-12-netinst.iso` 直接拖到那个分区的根目录（**不用解压、不用格式化**）
+6. 硬盘接目标机器 → 开机按 F12 / F8 / Del 进启动菜单 → 选 USB 启动
+
+后续想装别的系统（Windows、Ubuntu、黑群晖等），**直接往硬盘里拖对应 ISO 即可**，启动菜单会列出所有 ISO。Ventoy 一次搞定永久使用。
+
+**备选**：Rufus 的 "写入硬盘" 模式也能做外置硬盘启动盘，但之后整个硬盘只能当启动盘、数据区小。Ventoy 明显更优。
+
+#### 场景 D：手机 / SD 卡 / 光盘
+
+- **SD 卡 + 读卡器**：和 U 盘等价，同样用 Rufus/Ventoy 写入
+- **Android 手机**（需要 root）：DriveDroid APP 可模拟成 USB 启动盘，临时用
+- **DVD 光盘**：Debian netinst ISO 700M 一张空白 DVD 就够，但现代笔记本很少带光驱，不推荐
+
+#### 场景 E：网络启动（PXE）
+
+家里已有 Linux 服务器？可以搭 PXE 服务器，目标机器从局域网启动安装器。**太折腾**，除非你有多台机器要频繁装，否则直接买 U 盘。
+
+### 1.1.2 启动盘制作避坑
+
+| 坑 | 解决 |
+|----|------|
+| Rufus 问 "ISO 模式还是 DD 模式" | Debian 选 **ISO 模式** |
+| Ventoy 在主板下启动失败 | 启动菜单里选 Ventoy 时按 F3 切换到 "Legacy 模式" 或相反 |
+| 选外置硬盘启动时机器找不到 | BIOS 里关闭 "Secure Boot"，USB 启动优先级提到最前 |
+| 老机器不认 USB 3.0 | 接 USB 2.0 口（通常黑色；USB 3.0 是蓝色） |
+| 写完启动盘 Windows 说"需要格式化" | 正常现象 Linux 分区表 Windows 读不了 别点格式化 |
 
 ### 1.2 基础配置
 
