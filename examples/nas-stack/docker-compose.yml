@@ -37,6 +37,10 @@ services:
       - immich-ml
     networks: [nas]
 
+  # 默认 CPU 模式。真机部署开 OpenVINO / CUDA 参见 ../self-hosted-nas.md#521-选择推理加速方式
+  # OpenVINO (Intel iGPU) 改镜像为 :${IMMICH_VERSION}-openvino + 加 devices /dev/dri + group_add render GID
+  # CUDA   (NVIDIA dGPU) 改镜像为 :${IMMICH_VERSION}-cuda + 加 deploy.resources.reservations.devices nvidia
+  # Windows WSL2 / Hyper-V 测试保持默认 CPU 模式 最稳
   immich-ml:
     image: ghcr.io/immich-app/immich-machine-learning:${IMMICH_VERSION}
     container_name: immich-ml

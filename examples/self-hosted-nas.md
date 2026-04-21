@@ -79,12 +79,14 @@ docker run --rm hello-world
 
 #### A.3 一键拉起核心应用栈（Immich + Jellyfin + qBittorrent）
 
+> 💡 **测试阶段走 CPU 模式即可**。笔记本无论有 Intel 核显还是 NVIDIA MX 独显，都**不用开 OpenVINO / CUDA**。原因见 [5.2.1 选择推理加速方式](#521-选择推理加速方式)。默认镜像就是 CPU 模式，10k 照片约 4-6 小时扫完，夜里挂着即可。真机部署时再开硬件加速。
+
 ```bash
 mkdir -p ~/nas-test/{photos,media,downloads,appdata}
 cd ~/nas-test
 
 cat > docker-compose.yml <<'EOF'
-# 测试专用 简化版 NAS 应用栈
+# 测试专用 简化版 NAS 应用栈（CPU 模式 无 GPU 加速）
 services:
   # ---- Immich 相册 ----
   immich-server:
@@ -642,8 +644,58 @@ docker compose up -d
 
 ### 5.2 性能调优（可选）
 
-- GPU 硬件加速：N100/Intel iGPU 可开启 OpenVINO，`.env` 里 `HWACCEL_TRANSCODING=vaapi`
-- 限制机器学习内存：`immich-machine-learning` 容器加 `mem_limit: 3G`
+#### 5.2.1 选择推理加速方式
+
+Immich ML 支持三种模式，按**你实际跑在什么机器上**选：
+
+| 环境 | 推荐模式 | 理由 |
+|------|---------|------|
+| **Windows 笔记本 + WSL2 / Hyper-V 测试** | **CPU 模式** ⭐ | Intel iGPU 透传到 WSL2 成功率低；NVIDIA CUDA 可用但显存紧；测试目的是跑通流程不是比速度；夜里挂着跑完即可 |
+| 真机 Debian + Intel iGPU（M720q / N100 / Iris Xe 等） | **OpenVINO** ⭐ | 原生支持 3-5 倍提速 一行配置启用 |
+| 真机 Debian + NVIDIA dGPU（GTX 1650+ / RTX 等） | **CUDA** | 速度最快 但显存 ≥ 4G 才舒服 2G MX 级独显吃紧 |
+| 树莓派 / ARM 单板机 | **CPU 模式** | 无其他选项 可跑但慢 建议关 CLIP 只留人脸识别 |
+
+默认镜像就是 CPU 模式，`nas-stack/docker-compose.yml` 不动任何配置即可。
+
+#### 5.2.2 Intel iGPU：启用 OpenVINO（真机部署时）
+
+真机装完 Debian 后改 `immich-ml` 配置：
+
+```yaml
+immich-ml:
+  image: ghcr.io/immich-app/immich-machine-learning:${IMMICH_VERSION}-openvino
+  devices:
+    - /dev/dri:/dev/dri
+  group_add:
+    - "993"  # render 组 GID 实际跑 stat -c %g /dev/dri/renderD128 拿准确值
+```
+
+Immich 管理台 → 机器学习 → 选 **OpenVINO**。
+
+#### 5.2.3 NVIDIA dGPU：启用 CUDA
+
+```yaml
+immich-ml:
+  image: ghcr.io/immich-app/immich-machine-learning:${IMMICH_VERSION}-cuda
+  deploy:
+    resources:
+      reservations:
+        devices:
+          - driver: nvidia
+            count: 1
+            capabilities: [gpu]
+```
+
+前置：
+- 宿主机装 NVIDIA 驱动 + nvidia-container-toolkit
+- `docker run --rm --gpus all nvidia/cuda:12.2.0-base-ubuntu22.04 nvidia-smi` 能看到显卡
+
+显存紧（≤ 2G）的卡（MX250 / MX350 等）需要关掉 Smart Search 只留人脸识别，否则 OOM。
+
+#### 5.2.4 其他调优
+
+- Jellyfin 转码硬件加速：`.env` 里 `HWACCEL_TRANSCODING=vaapi`，Jellyfin 管理台→播放→硬件加速选 VA-API
+- 限制 ML 内存：`immich-ml` 服务加 `mem_limit: 3G` 防吃爆主机内存
 
 ---
 
