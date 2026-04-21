@@ -1,0 +1,37 @@
+# moxian-p2p 客户端配置 — NAS 节点
+# 复制为 client.yaml 后修改 bootstrap.sh 也会检查此文件存在
+
+# 节点标识 全局唯一
+node_id: home-nas
+
+# 信令服务器（VPS 或 Oracle Free Tier 跑 moxian-server）
+server: wss://your-signal.example.com:8443
+udp: your-signal.example.com:7000
+
+# 所有节点必须一致 KCP AES 派生密钥
+passphrase: CHANGEME-strong-shared-passphrase
+
+# 标签（便于其他节点识别）
+tags:
+  - role=nas
+  - location=home
+
+# 只允许可信节点连入 过滤陌生接入
+allow_peers:
+  - role=owner
+  - role=family
+
+# TUN 虚拟网卡 vIP 自动分配
+virtual_ip: auto
+
+# Mesh 自动与下列节点建立 P2P 隧道
+mesh: true
+mesh_pool:
+  - phone
+  - laptop
+
+# 客户端出站限速（字节/秒）0 = 不限
+rate_limit: 0
+
+# 详细日志 排障时开
+verbose: false
