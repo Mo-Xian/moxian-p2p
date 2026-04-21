@@ -195,46 +195,176 @@ vim client.yaml
 
 用 VM 跑一台完整 Debian，和真机部署 **100% 一致**，可以把本文档每一步都练一遍。
 
-#### B.1 开启 Hyper-V（Windows 专业版/企业版）
+#### B.1 前置检查
+
+```powershell
+# PowerShell 普通权限即可
+systeminfo | findstr /i "Hyper-V"
+```
+
+要求：
+- Windows 10 / 11 **专业版 / 企业版 / 教育版**（家庭版**没**这功能 → 用 VirtualBox 替代 见 B.11）
+- BIOS 开启 **虚拟化技术**（Intel VT-x / AMD-V）
+- 64 位 CPU、8G+ 内存
+
+如果 `已检测到虚拟化 - 是` 即可。BIOS 未开的话进 BIOS 找 `Intel Virtualization Technology` 或 `SVM Mode` 启用。
+
+#### B.2 启用 Hyper-V 功能
+
+**方法一：PowerShell**
 
 ```powershell
 # 管理员 PowerShell
 Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V -All
-# 重启
+Restart-Computer
 ```
 
-> Windows 家庭版没 Hyper-V，改用 **VirtualBox**（免费）或 **VMware Workstation Player**（免费非商用）。
+**方法二：图形界面**
 
-#### B.2 创建 VM
+控制面板 → 程序 → 启用或关闭 Windows 功能 → 勾选 **Hyper-V**（含"管理工具"和"平台"两项）→ 重启。
 
-- 名称：`nas-test`
-- 代数：第二代
-- 内存：4096 MB（启用动态内存）
-- 网络：新建"外部虚拟交换机"绑定到物理网卡 → VM 在局域网里有独立 IP
-- 虚拟硬盘：40G（系统）+ 两块 10G 盘（模拟 RAID，可选）
+重启后开始菜单搜 **Hyper-V 管理器** 即可打开。
 
-挂载 `debian-12-netinst.iso`，开机安装。
+#### B.3 创建虚拟交换机（网络桥接）
 
-#### B.3 按本文档完整走一遍
+**关键步骤**。要让 VM 在局域网里有独立 IP（和真 NAS 一样），必须桥接物理网卡。
 
-VM 装好 Debian 后，从本文档 [1. 系统底座](#1-系统底座debian-12) 开始照做，RAID 那步用两块 10G 虚拟盘练手。
+Hyper-V 管理器 → 右侧 **虚拟交换机管理器** → 新建虚拟网络交换机：
 
-**优势**：
-- 随时快照，操作失败回滚
-- 和真机一模一样的环境，文档里每条命令都能验证
+- 类型：**外部**
+- 名称：`LAN-Bridge`
+- 外部网络：选物理网卡（**有线优先**；WiFi 可用但可能不稳）
+- 建议勾选 "允许管理操作系统共享此网络适配器"（家用场景 主机仍能联网）
+
+> ⚠️ 创建时网络会短暂断开 5-10 秒 别在视频会议时搞。
+
+#### B.4 下载 Debian ISO
+
+```powershell
+# PowerShell 任意目录
+Invoke-WebRequest `
+  -Uri "https://mirrors.tuna.tsinghua.edu.cn/debian-cd/current/amd64/iso-cd/debian-12.9.0-amd64-netinst.iso" `
+  -OutFile "D:\iso\debian-12-netinst.iso"
+```
+
+版本号可能变，去 <https://www.debian.org/distrib/> 取最新 `netinst`。约 700M。
+
+#### B.5 新建 VM
+
+Hyper-V 管理器 → **操作 → 新建 → 虚拟机**：
+
+| 步骤 | 选项 |
+|------|------|
+| 名称 | `nas-test` |
+| 代 | **第二代**（UEFI） |
+| 内存 | **4096 MB** 勾选"使用动态内存" |
+| 网络连接 | `LAN-Bridge` |
+| 虚拟硬盘 | **40 GB** 路径 `D:\Hyper-V\nas-test\system.vhdx` |
+| 安装选项 | 从可启动映像文件安装 → 选上一步 ISO |
+
+完成后**先别启动**，继续下一步。
+
+#### B.6 关闭安全启动（Linux 第二代 VM 必做）
+
+第二代 VM 默认开 Secure Boot，会阻止 Debian 启动。
+
+右键 `nas-test` → **设置 → 安全** → 取消勾选 **启用安全启动**。
+
+（或模板改选 "Microsoft UEFI 证书颁发机构"，Debian 官方 ISO 也能过。）
+
+#### B.7 （可选）加虚拟盘模拟 RAID
+
+想练 `mdadm` 组 RAID 1 的话，添加两块虚拟盘：
+
+设置 → **SCSI 控制器 → 添加硬盘驱动器 → 新建** →
+- 类型：**动态扩展**
+- 大小：**10 GB**
+- 路径：`D:\Hyper-V\nas-test\raid-1.vhdx`
+
+重复一次建 `raid-2.vhdx`。VM 里就有 3 块盘：系统盘 + 2 块 RAID 盘。
+
+#### B.8 启动 + 装 Debian
+
+启动 `nas-test` → 右键 → 连接（打开控制台）。
+
+Debian 安装要点：
+- 网络：DHCP 自动从家里路由器拿 IP
+- 主机名：`nas-test`
+- 分区：**使用整个磁盘** → 选 40G 那块（别误选 10G RAID 盘）
+- 软件选择：**只勾 SSH server + standard system utilities**，桌面环境全不选
+- 约 5-10 分钟 → 重启 → 出登录提示
+
+#### B.9 拿 IP 并 SSH 连入
+
+VM 控制台登录后：
+
+```bash
+ip addr show
+# 记下 eth0 的 IP 例如 192.168.1.50
+```
+
+回 Windows 用任意 SSH 客户端（PowerShell 内置 `ssh`、Windows Terminal、MobaXterm 等）：
+
+```powershell
+ssh nas@192.168.1.50
+```
+
+**此后所有操作都在 SSH 里做**，比 Hyper-V 控制台方便太多（可复制粘贴、上下滚动、tmux 分屏）。
+
+#### B.10 快照保护（随便折腾）
+
+Hyper-V 管理器 → 右键 VM → **检查点** 即快照。
+
+推荐快照节点：
+- `fresh-install` — 刚装完 Debian
+- `after-casaos` — 装完 CasaOS
+- `before-raid` — 组 RAID 前
+- `working-nas` — 整套跑通后
+
+折腾失败右键检查点 → **应用** → 秒回。
+
+#### B.11 家庭版 Windows 替代：VirtualBox
+
+没专业版跳过 B.2-B.3，改用 **VirtualBox**：
+
+1. 下载 <https://www.virtualbox.org>（免费）
+2. 新建 → Linux → Debian 64-bit
+3. 内存 4G、硬盘 40G
+4. 设置 → 网络 → 方式选 **桥接网卡** → 选物理网卡（等同 Hyper-V 的外部交换机）
+5. 存储 → 光驱 → 挂载 `debian-12-netinst.iso`
+6. 启动 → 走 B.8 装 Debian
+
+之后步骤和 Hyper-V 一样。
+
+#### B.12 完整预演 NAS
+
+VM 装好 Debian 后，从本文档 [1. 系统底座](#1-系统底座debian-12) 开始照做，每一步命令都能验证。**优势**：
+- 随时快照回滚，操作失败不心疼
+- 和真机一模一样的环境
 - 笔记本休眠时 VM 保存状态，恢复继续
 
-#### B.4 迁移到真机
+#### B.13 迁移到真机
 
 VM 里的 `/mnt/pool/appdata/` 直接 rsync 到真机：
 
 ```bash
 # 在真机上
-rsync -avP --rsh=ssh user@<笔记本 IP>:/mnt/pool/appdata/ /mnt/pool/appdata/
+rsync -avP --rsh=ssh nas@<VM-IP>:/mnt/pool/appdata/ /mnt/pool/appdata/
 
-# Docker 容器在新机器上重新 docker compose up -d
-# 数据卷指向同路径 应用自动识别历史数据
+# 新机器上重新 docker compose up -d
+# 数据卷路径一致 应用自动识别历史数据
 ```
+
+#### B.14 常见问题
+
+| 症状 | 解决 |
+|------|------|
+| 启动 "Boot Failed" | 关安全启动（B.6）|
+| VM 启动卡住 / 极慢 | 禁用"动态内存"改固定 4G 或检查主机内存占用 |
+| VM 拿不到 IP | 虚拟交换机没选对物理网卡 或路由器 DHCP 没开 |
+| 装完 Hyper-V 后 VirtualBox 用不了 | Hyper-V 独占 CPU 虚拟化 → 二选一；或 Windows 11 用 Hyper-V Platform 兼容子集 |
+| WiFi 建交换机后掉线 | 网卡驱动不完整支持桥接 → 升级驱动 或改 NAT（但 VM 不在局域网内）|
+| 启动报 "无法建立与虚拟机的连接" | Hyper-V 服务没启动 `Start-Service vmms` |
 
 ### 方案 C：Docker Desktop（最快体验）
 
