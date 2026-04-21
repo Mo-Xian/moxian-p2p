@@ -44,18 +44,14 @@ class MoxianVpnService : VpnService() {
     }
 
     private fun buildVpn(vip: String): Int? {
+        // 关键：只 addRoute("10.88.0.0", 24) 让虚拟网流量走 VPN
+        // 其他目的（包括 server 公网 IP/STUN/打洞 peer 的公网 IP）默认走物理网卡 不会形成死循环
+        // 因此无需 addDisallowedApplication（那会把本 APP 所有流量都排除 包括测试按钮发给 10.88.0.X 的 HTTP）
         val builder = Builder()
             .setSession("moxian-p2p")
             .setMtu(1400)
             .addAddress(vip, 24)
             .addRoute("10.88.0.0", 24)
-
-        // 防止本 APP 自己的流量被路由回 TUN 形成死循环
-        // 如果不加，moxian-client 的信令/STUN UDP 包会被自己的 VPN 吞了
-        try {
-            builder.addDisallowedApplication(packageName)
-        } catch (_: Exception) {
-        }
 
         val pfd = builder.establish() ?: return null
         return pfd.detachFd()
