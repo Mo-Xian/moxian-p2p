@@ -6,6 +6,22 @@
     android:background="@color/bg"
     android:padding="12dp">
 
+    <!-- 升级横幅（默认隐藏 检测到新版本时显示）-->
+    <TextView
+        android:id="@+id/tv_update"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:visibility="gone"
+        android:padding="10dp"
+        android:layout_marginBottom="6dp"
+        android:textColor="@color/bg"
+        android:textSize="13sp"
+        android:textStyle="bold"
+        android:background="@color/green"
+        android:gravity="center"
+        android:clickable="true"
+        android:focusable="true"/>
+
     <!-- 状态条 -->
     <LinearLayout
         android:layout_width="match_parent"
@@ -84,13 +100,42 @@
                 android:background="@color/bg_card"
                 android:padding="12dp">
 
-                <TextView
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="配置"
-                    android:textColor="@color/accent"
-                    android:textStyle="bold"
-                    android:paddingBottom="8dp"/>
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:paddingBottom="8dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="配置"
+                        android:textColor="@color/accent"
+                        android:textStyle="bold"/>
+
+                    <Button
+                        android:id="@+id/btn_qr_scan"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:minHeight="32dp"
+                        android:minWidth="64dp"
+                        android:paddingHorizontal="8dp"
+                        android:text="扫码"
+                        android:textSize="12sp"
+                        android:layout_marginEnd="6dp"/>
+
+                    <Button
+                        android:id="@+id/btn_qr_show"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:minHeight="32dp"
+                        android:minWidth="64dp"
+                        android:paddingHorizontal="8dp"
+                        android:text="分享"
+                        android:textSize="12sp"/>
+                </LinearLayout>
 
                 <EditText
                     android:id="@+id/et_node_id"

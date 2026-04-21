@@ -6,6 +6,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.net.VpnService
 import android.os.Build
 import android.os.Bundle
@@ -27,6 +28,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
 import java.net.URL
+import java.net.URLEncoder
+
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.MultiFormatWriter
+import com.journeyapps.barcodescanner.BarcodeEncoder
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanOptions
 
 class MainActivity : AppCompatActivity() {
 
@@ -36,6 +44,24 @@ class MainActivity : AppCompatActivity() {
     private val notifPermLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { /* 拒绝也不影响 Service 只是通知不可见 */ }
+
+    // 扫码回调
+    private val qrScanLauncher = registerForActivityResult(ScanContract()) { result ->
+        val content = result.contents
+        if (content.isNullOrBlank()) {
+            toast("扫码取消")
+        } else {
+            importFromMoxianUri(content)
+        }
+    }
+
+    // 相机权限回调（同意后启动扫描）
+    private val cameraPermLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) launchQrScan()
+        else toast("需要相机权限才能扫码")
+    }
 
     // auto 模式下 probe 到的 vip 等 VPN 授权通过后用
     @Volatile private var pendingVip: String? = null
@@ -70,6 +96,9 @@ class MainActivity : AppCompatActivity() {
             appendLog("══════════════════════════════")
         }
 
+        // 异步检查新版本
+        checkForUpdate()
+
         binding.btnStartStop.setOnClickListener {
             if (ClientController.isRunning()) stopVpn() else startVpn()
         }
@@ -81,6 +110,8 @@ class MainActivity : AppCompatActivity() {
             selfTestAar()
             true
         }
+        binding.btnQrScan.setOnClickListener { startScanQr() }
+        binding.btnQrShow.setOnClickListener { showConfigQr() }
 
         observeControllerState()
     }
@@ -377,6 +408,108 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun toast(s: String) = Toast.makeText(this, s, Toast.LENGTH_SHORT).show()
+
+    // ---- 二维码扫描 / 生成 ----
+    // URL scheme: moxian://import?n=nodeId&s=server&u=udp&t=token&p=pass&v=vip&m=mesh
+    private fun startScanQr() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
+            == PackageManager.PERMISSION_GRANTED
+        ) {
+            launchQrScan()
+        } else {
+            cameraPermLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    private fun launchQrScan() {
+        val options = ScanOptions().apply {
+            setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+            setPrompt("扫描 moxian-p2p 配置二维码")
+            setBeepEnabled(false)
+            setOrientationLocked(false)
+        }
+        qrScanLauncher.launch(options)
+    }
+
+    private fun importFromMoxianUri(raw: String) {
+        val uri = try { Uri.parse(raw) } catch (e: Exception) { null }
+        if (uri == null || uri.scheme != "moxian" || uri.host != "import") {
+            toast("不是 moxian 配置二维码：$raw")
+            return
+        }
+        uri.getQueryParameter("n")?.let { binding.etNodeId.setText(it) }
+        uri.getQueryParameter("s")?.let { binding.etServer.setText(it) }
+        uri.getQueryParameter("u")?.let { binding.etUdp.setText(it) }
+        uri.getQueryParameter("t")?.let { binding.etToken.setText(it) }
+        uri.getQueryParameter("p")?.let { binding.etPass.setText(it) }
+        uri.getQueryParameter("v")?.let { binding.etVip.setText(it) }
+        uri.getQueryParameter("m")?.toBooleanStrictOrNull()?.let { binding.cbMesh.isChecked = it }
+        saveConfig()
+        toast("配置已导入")
+    }
+
+    private fun buildMoxianUri(): String {
+        fun enc(v: String) = URLEncoder.encode(v, "UTF-8")
+        val n = enc(binding.etNodeId.text.toString().trim())
+        val s = enc(binding.etServer.text.toString().trim())
+        val u = enc(binding.etUdp.text.toString().trim())
+        val t = enc(binding.etToken.text.toString().trim())
+        val p = enc(binding.etPass.text.toString().trim())
+        val v = enc(binding.etVip.text.toString().trim())
+        val m = binding.cbMesh.isChecked
+        return "moxian://import?n=$n&s=$s&u=$u&t=$t&p=$p&v=$v&m=$m"
+    }
+
+    private fun showConfigQr() {
+        val uri = buildMoxianUri()
+        val size = 720
+        val matrix = try {
+            MultiFormatWriter().encode(uri, BarcodeFormat.QR_CODE, size, size)
+        } catch (e: Exception) {
+            toast("生成 QR 失败: ${e.message}")
+            return
+        }
+        val bitmap = BarcodeEncoder().createBitmap(matrix)
+        val imageView = android.widget.ImageView(this).apply {
+            setImageBitmap(bitmap)
+            adjustViewBounds = true
+            setPadding(24, 24, 24, 24)
+        }
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("分享此配置给其他节点")
+            .setMessage("让其他设备 APP 点\"扫码\"扫这个二维码 自动填入配置\n⚠️ 内含 token/pass 注意不要外泄")
+            .setView(imageView)
+            .setPositiveButton("关闭", null)
+            .show()
+    }
+
+    // ---- 自动升级检查 ----
+    private fun checkForUpdate() {
+        lifecycleScope.launch(Dispatchers.IO) {
+            val tag = try {
+                val url = URL("https://api.github.com/repos/Mo-Xian/moxian-p2p/releases/latest")
+                val conn = url.openConnection() as HttpURLConnection
+                conn.setRequestProperty("Accept", "application/vnd.github+json")
+                conn.connectTimeout = 5_000
+                conn.readTimeout = 5_000
+                val json = conn.inputStream.bufferedReader().use { it.readText() }
+                Regex("""\"tag_name\"\s*:\s*\"([^\"]+)\"""").find(json)?.groupValues?.get(1)
+            } catch (_: Exception) { null } ?: return@launch
+
+            val latestClean = tag.removePrefix("v")
+            val current = BuildConfig.VERSION_NAME
+            if (latestClean != current) {
+                withContext(Dispatchers.Main) {
+                    binding.tvUpdate.visibility = View.VISIBLE
+                    binding.tvUpdate.text = "🔔 发现新版 $tag（当前 v$current）点此下载"
+                    binding.tvUpdate.setOnClickListener {
+                        val uri = Uri.parse("https://github.com/Mo-Xian/moxian-p2p/releases/tag/$tag")
+                        try { startActivity(Intent(Intent.ACTION_VIEW, uri)) } catch (_: Exception) {}
+                    }
+                }
+            }
+        }
+    }
 
     private fun requestNotificationPermissionIfNeeded() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
