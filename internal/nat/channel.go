@@ -24,6 +24,9 @@ type Channel struct {
 	readDdl  time.Time
 	incoming chan incomingPkt
 
+	// done 关闭表示 Channel 已停止 用于替代 close(incoming)
+	// 避免 deliver 与 Close 并发导致 send on closed channel panic
+	done   chan struct{}
 	closed atomic.Bool
 
 	// 流量统计（payload 字节 不含 KCP/IP/UDP 头）
@@ -68,6 +71,7 @@ func NewChannel(mux *Mux, sessionID string) *Channel {
 		sessionID: sessionID,
 		mux:       mux,
 		incoming:  make(chan incomingPkt, 512),
+		done:      make(chan struct{}),
 	}
 	mux.RegisterChannel(c)
 	return c
@@ -89,12 +93,13 @@ func (c *Channel) SetRelay(addr *net.UDPAddr) {
 func (c *Channel) Mode() int32 { return c.mode.Load() }
 
 func (c *Channel) deliver(data []byte, from *net.UDPAddr) {
-	if c.closed.Load() {
-		return
-	}
 	buf := make([]byte, len(data))
 	copy(buf, data)
+	// 监听 done 避免 Close 并发时 send on closed channel
+	// incoming 永不 close 仅靠 done 通知 ReadFrom 退出
 	select {
+	case <-c.done:
+		return
 	case c.incoming <- incomingPkt{data: buf, from: from}:
 	default:
 		// 丢弃 防止阻塞
@@ -128,14 +133,13 @@ func (c *Channel) ReadFrom(p []byte) (int, net.Addr, error) {
 	}()
 
 	select {
-	case pkt, ok := <-c.incoming:
-		if !ok {
-			return 0, nil, net.ErrClosed
-		}
+	case pkt := <-c.incoming:
 		n := copy(p, pkt.data)
 		c.rxBytes.Add(int64(n))
 		c.rxPkts.Add(1)
 		return n, pkt.from, nil
+	case <-c.done:
+		return 0, nil, net.ErrClosed
 	case <-timeC:
 		return 0, nil, timeoutErr{}
 	}
@@ -179,7 +183,7 @@ func (c *Channel) Close() error {
 		return nil
 	}
 	c.mux.UnregisterChannel(c.sessionID)
-	close(c.incoming)
+	close(c.done)
 	return nil
 }
 

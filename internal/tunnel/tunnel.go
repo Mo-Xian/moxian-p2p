@@ -65,14 +65,16 @@ func DialInitiator(ch *nat.Channel, passphrase, sessionID string) (*smux.Session
 }
 
 // ServeResponder 被动侧：接受 KCP+smux 会话
+// 一个 Channel 只服务一次会话 AcceptKCP 成功后立刻关闭 listener
+// 避免监听 goroutine 泄漏 以及后续重发握手堆积无人接收的 UDPSession
 func ServeResponder(ch *nat.Channel, passphrase, sessionID string) (*smux.Session, error) {
 	listener, err := kcp.ServeConn(newKcpBlock(passphrase, sessionID), 0, 0, ch)
 	if err != nil {
 		return nil, err
 	}
+	defer listener.Close()
 	kc, err := listener.AcceptKCP()
 	if err != nil {
-		listener.Close()
 		return nil, err
 	}
 	tuneKcp(kc)
