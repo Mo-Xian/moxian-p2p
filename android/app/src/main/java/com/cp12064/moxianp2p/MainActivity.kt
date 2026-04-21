@@ -63,12 +63,24 @@ class MainActivity : AppCompatActivity() {
         restoreConfig()
         requestNotificationPermissionIfNeeded()
 
+        // 首次进入时 打印上次崩溃日志
+        MoxianApplication.consumeCrashLog(application)?.let { crash ->
+            appendLog("══════ 上次运行崩溃日志 ══════")
+            crash.lines().take(80).forEach { appendLog(it) }
+            appendLog("══════════════════════════════")
+        }
+
         binding.btnStartStop.setOnClickListener {
             if (ClientController.isRunning()) stopVpn() else startVpn()
         }
         binding.btnClear.setOnClickListener { binding.tvLog.text = "" }
         binding.btnCopy.setOnClickListener { copyLog() }
         binding.btnTest.setOnClickListener { runTest() }
+        // 长按复制按钮做 AAR 自检 验证 gomobile 加载正常
+        binding.btnCopy.setOnLongClickListener {
+            selfTestAar()
+            true
+        }
 
         observeControllerState()
     }
@@ -253,6 +265,18 @@ class MainActivity : AppCompatActivity() {
         val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         cm.setPrimaryClip(ClipData.newPlainText("moxian-p2p log", binding.tvLog.text))
         toast(getString(R.string.copied))
+    }
+
+    // 长按复制按钮触发 AAR 自检：单独调 Mobile.version() 看 gomobile native lib 能不能加载
+    private fun selfTestAar() {
+        appendLog("[selftest] 检查 gomobile AAR 加载...")
+        val version = try {
+            com.cp12064.moxianp2p.mobile.Mobile.version()
+        } catch (e: Throwable) {
+            appendLog("[selftest] ❌ 加载失败: ${e.javaClass.simpleName}: ${e.message}")
+            return
+        }
+        appendLog("[selftest] ✅ AAR OK version=$version")
     }
 
     // ---- 配置持久化 ----
