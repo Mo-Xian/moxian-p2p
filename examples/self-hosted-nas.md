@@ -2,6 +2,8 @@
 
 本文演示如何用 **Debian + Docker + 开源组件** 从零搭一台功能对标"飞牛 OS / 群晖"的家庭 NAS，并用 moxian-p2p 打通外网访问。**全套零订阅、零闭源、数据不出本地**。
 
+> 💡 **已有 Debian 环境，想跳过原理直接跑起来？** 见 [`nas-stack/`](nas-stack/) 目录 —— 一键 `bootstrap.sh` + 统一 `docker-compose.yml`，30 分钟从裸机到完整 NAS，迁移新机器只需 `rsync + docker compose up -d`。本文档讲原理，`nas-stack` 是成品化的自动脚本。
+
 ## 目录
 
 - [硬件参考](#硬件参考)
