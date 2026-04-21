@@ -59,7 +59,7 @@ internal/client   # 客户端主控
 |------|--------|--------|------|
 | Linux amd64 | `moxian-server-linux-amd64` | `moxian-client-linux-amd64` | x86_64 VPS / 服务器 |
 | Linux arm64 | `moxian-server-linux-arm64` | `moxian-client-linux-arm64` | 树莓派 / 甲骨文 ARM / Graviton |
-| Windows amd64 | `moxian-server.exe` | `moxian-client.exe` | Windows 桌面 |
+| Windows amd64 | `moxian-server.exe` | `moxian-client.exe` / `moxian-gui.exe` | Windows 桌面（GUI 版为系统托盘图标） |
 | macOS amd64 | - | `moxian-client-darwin-amd64` | Mac Intel（Apple Silicon 走 Rosetta） |
 | Android | - | `moxian-p2p-debug.apk` | Android 7.0+（arm64） |
 | Windows TUN 驱动 | - | `wintun.dll` | 用 Windows TUN 模式时 放 exe 同目录 |

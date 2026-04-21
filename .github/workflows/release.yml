@@ -44,6 +44,8 @@ jobs:
           GOOS=linux   GOARCH=arm64 go build -trimpath -ldflags "$LD_FLAGS" -o bin/moxian-client-linux-arm64 ./cmd/client
           GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "$LD_FLAGS" -o bin/moxian-server.exe           ./cmd/server
           GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "$LD_FLAGS" -o bin/moxian-client.exe           ./cmd/client
+          # Windows 托盘 GUI 隐藏控制台 右键 exe 以管理员身份运行
+          GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "$LD_FLAGS -H=windowsgui" -o bin/moxian-gui.exe ./cmd/moxian-gui
           GOOS=darwin  GOARCH=amd64 go build -trimpath -ldflags "$LD_FLAGS" -o bin/moxian-client-darwin-amd64  ./cmd/client
           ls -la bin/
 
@@ -120,6 +122,7 @@ jobs:
             bin/moxian-client-linux-arm64
             bin/moxian-client-darwin-amd64
             bin/moxian-client.exe
+            bin/moxian-gui.exe
             bin/moxian-p2p-debug.apk
             bin/wintun.dll
             bin/SHA256SUMS.txt
