@@ -12,6 +12,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"image"
 	"image/color"
 	"image/png"
@@ -206,6 +207,10 @@ func (s *stateSniffer) Write(p []byte) (int, error) {
 	return s.out.Write(p)
 }
 
+// makeIcon 生成 Windows 托盘用的 ICO 格式图标
+// systray 在 Windows 下把 icon 写成 .ico 文件再 LoadImage 加载
+// 需要合法 ICO 格式 (仅 PNG bytes 会失败图标不显示)
+// 这里构造最小 ICO: 6 字节 header + 16 字节 dirEntry + PNG 图像数据
 func makeIcon(r, g, b uint8) []byte {
 	img := image.NewNRGBA(image.Rect(0, 0, 16, 16))
 	for y := 0; y < 16; y++ {
@@ -213,7 +218,25 @@ func makeIcon(r, g, b uint8) []byte {
 			img.Set(x, y, color.NRGBA{R: r, G: g, B: b, A: 0xFF})
 		}
 	}
+	var pngBuf bytes.Buffer
+	_ = png.Encode(&pngBuf, img)
+	pngBytes := pngBuf.Bytes()
+
 	var buf bytes.Buffer
-	_ = png.Encode(&buf, img)
+	// ICONDIR (6 bytes)
+	_ = binary.Write(&buf, binary.LittleEndian, uint16(0)) // Reserved
+	_ = binary.Write(&buf, binary.LittleEndian, uint16(1)) // Type 1=ICO
+	_ = binary.Write(&buf, binary.LittleEndian, uint16(1)) // 1 个图像
+	// ICONDIRENTRY (16 bytes)
+	buf.WriteByte(16)                                                   // Width
+	buf.WriteByte(16)                                                   // Height
+	buf.WriteByte(0)                                                    // Palette 无
+	buf.WriteByte(0)                                                    // Reserved
+	_ = binary.Write(&buf, binary.LittleEndian, uint16(1))              // Color planes
+	_ = binary.Write(&buf, binary.LittleEndian, uint16(32))             // 每像素位数
+	_ = binary.Write(&buf, binary.LittleEndian, uint32(len(pngBytes)))  // 数据大小
+	_ = binary.Write(&buf, binary.LittleEndian, uint32(6+16))           // 数据偏移
+	// Image data (PNG format Vista+ 支持)
+	buf.Write(pngBytes)
 	return buf.Bytes()
 }
