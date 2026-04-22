@@ -7,6 +7,23 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.CAMERA" />
 
+    <!-- Android 11+ 查询其他 APP 是否已装 用于服务启动器的 deeplink 唤起 -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="http" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
+        </intent>
+        <!-- 已知的专业 APP 包名 isInstalled 检查 -->
+        <package android:name="org.jellyfin.mobile" />
+        <package android:name="dev.jdtech.jellyfin" />
+        <package android:name="app.alextran.immich" />
+        <package android:name="app.symfonik.music.player" />
+    </queries>
+
     <application
         android:name=".MoxianApplication"
         android:label="moxian-p2p"
@@ -27,6 +44,12 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".ServiceLauncherActivity"
+            android:exported="false"
+            android:parentActivityName=".MainActivity"
+            android:label="NAS 服务" />
 
         <!-- VpnService 不需要 foregroundServiceType 系统会自动把它当前台服务 -->
         <service

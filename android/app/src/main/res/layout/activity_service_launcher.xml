@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/bg"
+    android:padding="12dp">
+
+    <!-- 顶部标题条 + 添加按钮 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="@color/bg_card"
+        android:padding="10dp"
+        android:layout_marginBottom="8dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:text="NAS 服务启动器"
+            android:textColor="@color/accent"
+            android:textSize="16sp"
+            android:textStyle="bold"/>
+
+        <Button
+            android:id="@+id/btn_add"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:minHeight="36dp"
+            android:minWidth="64dp"
+            android:paddingHorizontal="12dp"
+            android:text="+ 添加"
+            android:textSize="13sp"
+            android:backgroundTint="@color/accent"
+            android:textColor="@color/bg"/>
+    </LinearLayout>
+
+    <!-- VPN 未连接提示（默认隐藏）-->
+    <TextView
+        android:id="@+id/tv_warn_vpn"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:visibility="gone"
+        android:padding="8dp"
+        android:layout_marginBottom="8dp"
+        android:text="⚠️ VPN 未连接 服务地址若是虚拟 IP 可能访问不到 请先回到主页启动"
+        android:textColor="@color/red"
+        android:textSize="12sp"
+        android:background="@color/bg_card"
+        android:gravity="center"/>
+
+    <!-- 空列表提示 -->
+    <TextView
+        android:id="@+id/tv_empty"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:visibility="gone"
+        android:padding="30dp"
+        android:gravity="center"
+        android:text="尚未配置任何服务\n点击右上角\"添加\"按钮\n或选\"一键导入常用\""
+        android:textColor="@color/text_secondary"
+        android:textSize="14sp"/>
+
+    <!-- 服务列表 -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rv_services"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:clipToPadding="false"
+        android:paddingBottom="8dp"/>
+
+    <!-- 一键导入常用模板 -->
+    <Button
+        android:id="@+id/btn_import_templates"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="一键导入常用模板（Jellyfin / Navidrome / Immich / qBittorrent 等）"
+        android:textSize="13sp"
+        android:textColor="@color/accent"
+        android:backgroundTint="@color/bg_card"/>
+</LinearLayout>

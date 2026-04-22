@@ -112,6 +112,9 @@ class MainActivity : AppCompatActivity() {
         }
         binding.btnQrScan.setOnClickListener { startScanQr() }
         binding.btnQrShow.setOnClickListener { showConfigQr() }
+        binding.btnServices.setOnClickListener {
+            startActivity(Intent(this, ServiceLauncherActivity::class.java))
+        }
 
         observeControllerState()
     }
