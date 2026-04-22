@@ -61,7 +61,7 @@
         android:visibility="gone"
         android:padding="30dp"
         android:gravity="center"
-        android:text="尚未配置任何服务\n点击右上角\"添加\"按钮\n或选\"一键导入常用\""
+        android:text="尚未配置任何服务\n点击右上角 + 添加 按钮\n或选 一键导入常用 模板"
         android:textColor="@color/text_secondary"
         android:textSize="14sp"/>
 
