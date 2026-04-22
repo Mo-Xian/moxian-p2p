@@ -7,6 +7,9 @@
 //   3. 托盘出现图标 右键菜单 → 启动
 //
 // 构建: go build -ldflags "-H=windowsgui" -o moxian-gui.exe ./cmd/moxian-gui
+
+//go:build windows
+
 package main
 
 import (
