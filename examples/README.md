@@ -9,7 +9,7 @@
 | `client.yaml` | 任意 client 节点配置（通用模板） | 各 client 机器 `/etc/moxian/client.yaml` 或 `bin/client.yaml` |
 | `moxian-client.service` | Linux client systemd unit | Linux 节点 `/etc/systemd/system/` |
 | [`self-hosted-nas.md`](self-hosted-nas.md) | 端到端自建 NAS 部署指南（Debian + Immich + Jellyfin + moxian-p2p 远程接入） | 文档 |
-| [`nas-stack/`](nas-stack/) | 自建 NAS 一键栈（bootstrap.sh + docker-compose.yml + moxian 配置模板 30 分钟部署）| NAS 主机 |
+| [`nas-stack/`](nas-stack/) | 自建 NAS 一键栈（Linux bootstrap.sh / Windows bootstrap.ps1 + docker-compose.yml + moxian 模板 30 分钟部署）| NAS 主机 |
 
 **VPS 只部署 server 相关文件，不部署 client**。client 跑在你想互通的各台机器上（家里 PC、办公室电脑、NAS、树莓派、手机等）。
 

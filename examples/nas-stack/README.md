@@ -15,13 +15,17 @@
 
 ## 快速开始
 
+**Windows 用户**：Docker Desktop 一键跑起来，不用碰 Linux。看 [`README-windows.md`](README-windows.md)。
+
+**Linux 用户（推荐真机部署）**：继续往下看。
+
 ### 前置
 
 - Debian 12 / Ubuntu 22.04+（其他发行版自行调整 `bootstrap.sh` 的 apt 命令）
 - `/mnt/pool` 已挂载（RAID 或单盘 ext4；[主指南](../self-hosted-nas.md) 有组 RAID 步骤）
 - sudo 权限
 
-### 三步部署
+### 三步部署（Linux）
 
 ```bash
 # 1. 拉取本仓库到 NAS
@@ -41,6 +45,22 @@ docker compose up -d
 ```
 
 约 3-5 分钟镜像拉完，`docker compose ps` 全绿即成功。
+
+### 三步部署（Windows）
+
+```powershell
+# 1. 装 Docker Desktop（需管理员一次）
+winget install Docker.DockerDesktop
+
+# 2. 拉代码 + 一键初始化
+git clone https://github.com/Mo-Xian/moxian-p2p
+cd moxian-p2p\examples\nas-stack
+.\bootstrap.ps1
+
+# 3. 浏览器 http://localhost:2283 等
+```
+
+详细步骤和 SMB 共享 / Windows Defender 排除 / 迁移卸载 见 [`README-windows.md`](README-windows.md)。
 
 ### 访问
 
