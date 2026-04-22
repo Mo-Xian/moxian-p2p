@@ -23,7 +23,11 @@ import com.cp12064.moxianp2p.mobile.Mobile
  * Activity / Service 共享同一实例
  */
 object ClientController {
-    enum class State { IDLE, CONNECTING, CONNECTED }
+    // IDLE     - 未启动
+    // CONNECTING - 启动中 VPN 拉起 信令 / TUN 未就绪
+    // READY    - 本端 VPN 通道已就绪（已注册信令 且 TUN 设备 up）无对端连接
+    // CONNECTED - 至少一个对端已建立隧道
+    enum class State { IDLE, CONNECTING, READY, CONNECTED }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -42,19 +46,31 @@ object ClientController {
     private val sink = object : GoLogSink {
         override fun log(line: String) {
             scope.launch { _logs.emit(line) }
-            // 状态关键字识别 —— 任一路径成功都算 CONNECTED
+            // 状态关键字识别：
+            //   CONNECTED: 至少一路对端隧道 established / 已识别到对端
+            //   READY    : 本端已注册信令 或 TUN 设备 up（还没对端 但 VPN 已可用）
+            //   IDLE     : 进程退出
             when {
                 "[forward]" in line && "established" in line -> _state.value = State.CONNECTED
                 "[responder]" in line && "established" in line -> _state.value = State.CONNECTED
                 "[mesh] connected to" in line -> _state.value = State.CONNECTED
                 "[peerpool] dialed" in line -> _state.value = State.CONNECTED
                 "[peerpool] registered inbound" in line -> _state.value = State.CONNECTED
+                "[tun] device=" in line -> promoteToReady()
+                "[client] registered " in line -> promoteToReady()
                 "process exited" in line -> _state.value = State.IDLE
             }
         }
     }
 
     fun isRunning(): Boolean = native?.isRunning ?: false
+
+    // 已 CONNECTED 不回退到 READY 只允许从 CONNECTING 升到 READY
+    private fun promoteToReady() {
+        if (_state.value == State.CONNECTING) {
+            _state.value = State.READY
+        }
+    }
 
     /** 由 MoxianVpnService 调用 yaml + tunFd 启动 */
     fun start(@Suppress("UNUSED_PARAMETER") context: Context, yamlConfig: String, tunFd: Int): Boolean {

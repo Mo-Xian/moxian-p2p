@@ -148,6 +148,11 @@ class MainActivity : AppCompatActivity() {
                 binding.tvStatus.text = getString(R.string.status_connecting)
                 binding.pbConnecting.visibility = View.VISIBLE
             }
+            ClientController.State.READY -> {
+                binding.tvStateDot.setTextColor(ContextCompat.getColor(this, R.color.accent))
+                binding.tvStatus.text = getString(R.string.status_ready)
+                binding.pbConnecting.visibility = View.GONE
+            }
             ClientController.State.CONNECTED -> {
                 binding.tvStateDot.setTextColor(ContextCompat.getColor(this, R.color.green))
                 binding.tvStatus.text = getString(R.string.status_connected)
