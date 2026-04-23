@@ -91,7 +91,22 @@ IP 查询：
 ipconfig | Select-String "IPv4"
 ```
 
-## 五、文件共享（SMB 原生）⭐ 比 Samba 简单
+## 五、moxian-p2p 远程访问（Windows 下用原生 exe）
+
+**重要**：compose 里的 `moxian-client` 服务**默认不启动**（受 `profiles: [p2p]` 保护）。原因：Docker Desktop / WSL2 下 host 网络 + TUN 设备透传不稳定，跑容器版 moxian 会各种坑。
+
+**Windows 下怎么用**：直接跑**原生 Windows 版 moxian-gui.exe**（带托盘 UI），或命令行版 `moxian-client.exe`。
+
+1. 从 [Release 页](https://github.com/Mo-Xian/moxian-p2p/releases/latest) 下载 `moxian-gui.exe` + `wintun.dll`
+2. 放到同一文件夹 + 准备好 `client.yaml`（模板见 `configs\moxian\client.yaml.example`）
+3. **右键 `moxian-gui.exe` → 以管理员身份运行**（TUN 驱动要管理员）
+4. 托盘图标右键菜单：启动 / 停止 / 编辑配置
+
+这样手机用 moxian-p2p APP 接入同一 mesh，就能通过虚拟 IP 访问这台 Windows 上的 Jellyfin / Immich 等服务。
+
+---
+
+## 六、文件共享（SMB 原生）⭐ 比 Samba 简单
 
 Windows 自带 SMB，不用装 Samba：
 
@@ -106,9 +121,9 @@ Windows 自带 SMB，不用装 Samba：
 - Mac：Finder → 连接服务器 → `smb://<ip>/nas-data`
 - 手机：SMB 客户端 APP 填同样地址
 
-## 六、性能优化
+## 七、性能优化
 
-### 6.1 Windows Defender 排除 Docker 卷 ⭐ 必做
+### 7.1 Windows Defender 排除 Docker 卷 ⭐ 必做
 
 Docker I/O 经过 Defender 扫描会慢 3-5 倍，加排除：
 
@@ -119,7 +134,7 @@ Add-MpPreference -ExclusionPath "$env:USERPROFILE\AppData\Local\Docker"
 Add-MpPreference -ExclusionPath "\\wsl.localhost\docker-desktop-data"
 ```
 
-### 6.2 限制 WSL2 内存（可选）
+### 7.2 限制 WSL2 内存（可选）
 
 Docker Desktop 默认可占用一半系统内存，想限制：
 
@@ -134,7 +149,7 @@ swap=2GB
 
 重启 Docker Desktop 生效。
 
-### 6.3 Jellyfin 硬件转码
+### 7.3 Jellyfin 硬件转码
 
 笔记本 Intel iGPU（你的 1065G7 是 Iris Plus Gen11）在 Docker Desktop 下**没法直接用**。两个选项：
 
@@ -143,17 +158,17 @@ swap=2GB
 
 多数家用场景选"不转码"即可。
 
-## 七、开机自启
+## 八、开机自启
 
-### 7.1 Docker Desktop 自启
+### 8.1 Docker Desktop 自启
 
 Docker Desktop 设置 → General → 勾"Start Docker Desktop when you sign in to your computer"。
 
-### 7.2 容器自启
+### 8.2 容器自启
 
 compose 里已有 `restart: unless-stopped`，Docker Desktop 启动后容器自动恢复。
 
-### 7.3 Windows 登录后自动启 Docker（不要求登录）
+### 8.3 Windows 登录后自动启 Docker（不要求登录）
 
 默认 Docker Desktop 需要用户登录 Windows 才启动。想**无人登录也跑**，要装 Windows Server 版 Docker，超出家用场景，不推荐。
 
@@ -165,7 +180,7 @@ control userpasswords2
 # 取消勾"要使用本计算机 用户必须输入用户名和密码"
 ```
 
-## 八、日常操作
+## 九、日常操作
 
 ```powershell
 cd C:\Users\你\moxian-p2p\examples\nas-stack
@@ -191,7 +206,7 @@ docker compose pull
 docker compose up -d
 ```
 
-## 九、迁移到另一台机器
+## 十、迁移到另一台机器
 
 **迁移到另一台 Windows**：
 
@@ -225,7 +240,7 @@ docker compose up -d
 
 应用自动识别历史数据，**照片库、影视元数据、密码库、下载任务全部继承**，**0 重做**。
 
-## 十、完全卸载
+## 十一、完全卸载
 
 停服务、清容器、清镜像：
 
@@ -262,7 +277,7 @@ Remove-MpPreference -ExclusionPath "D:\nas-data"
 
 **系统完全回到装 Docker Desktop 之前的状态，零残留**。
 
-## 十一、常见问题
+## 十二、常见问题
 
 | 症状 | 解决 |
 |------|------|
@@ -272,11 +287,11 @@ Remove-MpPreference -ExclusionPath "D:\nas-data"
 | 浏览器 `localhost:2283` 连不上 | `docker compose ps` 看容器是否 running 然后看端口是否被其他进程占用 `netstat -ano \| findstr 2283` |
 | 局域网其他设备访问不到 | Windows 防火墙拦了 入站规则放行 2283/8096/8080/8081/8384 |
 | Immich 扫照片极慢 | 给 Docker Desktop 加内存到 8G；关掉 Smart Search 只留人脸识别 |
-| 磁盘 I/O 飙高卡顿 | Windows Defender 没加排除（第 6.1 节） |
+| 磁盘 I/O 飙高卡顿 | Windows Defender 没加排除（第 7.1 节） |
 | 电脑合盖服务就断 | 电源设置 → "合盖时" 改"不采取任何操作"（插电时） |
 | 想手机访问 Windows 的 NAS | 用 moxian-p2p APP 接入同一 mesh 手机填 NAS 的虚拟 IP |
 
-## 十二、和主文档的关系
+## 十三、和主文档的关系
 
 - **主文档 `self-hosted-nas.md`** — Linux 真机部署指南（RAID / Samba / systemd）
 - **本文档 `README-windows.md`** — Windows 快速体验版

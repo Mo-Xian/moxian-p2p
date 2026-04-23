@@ -1,0 +1,10 @@
+# 减小 Docker 构建上下文
+bin/
+.git/
+.github/
+android/
+examples/
+cmd/moxian-gui/
+*.md
+*.log
+*.apk

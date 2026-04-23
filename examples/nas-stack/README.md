@@ -41,10 +41,15 @@ vim .env                                # 所有 CHANGEME 改成强密码
 cp configs/moxian/client.yaml.example configs/moxian/client.yaml
 vim configs/moxian/client.yaml          # 填 server 和 passphrase
 
-docker compose up -d
+# 4. 启动：默认不起 moxian 容器 加 --profile p2p 才起
+docker compose --profile p2p up -d      # Linux 真机（含 moxian P2P 接入）
+# 或
+docker compose up -d                    # 只起应用栈 moxian 另外跑（systemd / 手动）
 ```
 
 约 3-5 分钟镜像拉完，`docker compose ps` 全绿即成功。
+
+> **关于 `--profile p2p`**：`moxian-client` 容器需要 TUN 设备 + host 网络 仅 Linux 真机 + 非桌面 Docker 环境稳定 所以默认藏在 `p2p` profile 下 显式开启才启动。Windows / macOS Docker Desktop **不要**加这个 profile（改用主机原生 moxian-gui.exe）。
 
 ### 三步部署（Windows）
 

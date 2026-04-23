@@ -155,12 +155,16 @@ services:
 
   # ==========================================================================
   # moxian-p2p — 远程访问（替代 Tailscale / 飞牛会员中继）
-  # TUN 模式需要 NET_ADMIN 和 /dev/net/tun
+  # 默认不启动 需显式开启 profile：
+  #   Linux:   docker compose --profile p2p up -d
+  #   Windows: 不起容器 改用原生 moxian-gui.exe 或 moxian-client.exe（Docker Desktop 下 host 网络 + TUN 不支持）
+  # TUN 模式需要 NET_ADMIN 和 /dev/net/tun 仅在 Linux 真机可用
   # ==========================================================================
   moxian-client:
     image: ghcr.io/mo-xian/moxian-p2p:latest
     container_name: moxian-client
     restart: unless-stopped
+    profiles: ["p2p"]
     cap_add:
       - NET_ADMIN
     devices:
