@@ -11,14 +11,13 @@ ARG TARGETOS
 ARG TARGETARCH
 
 WORKDIR /src
-COPY go.mod go.sum ./
-RUN go mod download
-
 COPY . .
 
 # CGO 关闭 完全静态 链接 方便在 scratch / alpine 上跑
 # 不同架构用 buildx 自动传 TARGETOS/TARGETARCH
+# 不单独 go mod download：项目 go.sum 个别子包入口不全 go build 会按需解析更宽松
 RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg/mod \
     CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
     go build -trimpath -ldflags="-s -w" -o /out/moxian-client ./cmd/client
 
