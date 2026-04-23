@@ -5,7 +5,7 @@
 # 镜像入口为 moxian-client 默认读 /etc/moxian/client.yaml
 # 覆盖：docker run -v ./my.yaml:/etc/moxian/client.yaml ghcr.io/mo-xian/moxian-p2p:latest
 
-FROM --platform=$BUILDPLATFORM golang:1.23-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS builder
 
 ARG TARGETOS
 ARG TARGETARCH
