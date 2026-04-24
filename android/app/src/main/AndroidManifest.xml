@@ -6,6 +6,8 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 
     <!-- Android 11+ 查询其他 APP 是否已装 用于服务启动器的 deeplink 唤起 -->
     <queries>
@@ -71,6 +73,49 @@
             android:exported="false"
             android:parentActivityName=".ServiceLauncherActivity"
             android:label="Syncthing" />
+
+        <activity
+            android:name=".AdGuardActivity"
+            android:exported="false"
+            android:parentActivityName=".ServiceLauncherActivity"
+            android:label="AdGuard Home" />
+
+        <activity
+            android:name=".ImmichActivity"
+            android:exported="false"
+            android:parentActivityName=".ServiceLauncherActivity"
+            android:label="Immich" />
+
+        <activity
+            android:name=".PhotoViewerActivity"
+            android:exported="false"
+            android:parentActivityName=".ImmichActivity"
+            android:theme="@style/Theme.AppCompat.NoActionBar"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:label="查看" />
+
+        <activity
+            android:name=".JellyfinActivity"
+            android:exported="false"
+            android:parentActivityName=".ServiceLauncherActivity"
+            android:label="Jellyfin" />
+
+        <activity
+            android:name=".NavidromeActivity"
+            android:exported="false"
+            android:parentActivityName=".ServiceLauncherActivity"
+            android:label="Navidrome" />
+
+        <activity
+            android:name=".VaultwardenActivity"
+            android:exported="false"
+            android:parentActivityName=".ServiceLauncherActivity"
+            android:label="Vaultwarden" />
+
+        <service
+            android:name=".NavPlayerService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
 
         <!-- VpnService 不需要 foregroundServiceType 系统会自动把它当前台服务 -->
         <service

@@ -123,17 +123,33 @@ object ServiceLauncher {
         ),
     )
 
-    // 内置轻量客户端映射：v0.9.x 陆续加 判断服务 URL 特征决定是否用内置
-    // 内置客户端主打"80% 日常操作"复杂功能仍建议跳原生 APP
+    // 内置轻量客户端映射（v1.0.0 全覆盖常见服务）
+    // 按服务名关键字匹配 一方面看 ServiceType 一方面容错用户自定义的名字
     private fun builtInActivity(svc: NasService): Class<*>? {
         val name = svc.name.lowercase()
         val url = svc.url.lowercase()
         return when {
-            "qbittorrent" in name || "qbit" in name || ":8081" in url || ":8080/" in url && "vault" !in name ->
+            // 下载
+            "qbittorrent" in name || "qbit" in name ->
                 QBittorrentActivity::class.java
+            // 同步
             "syncthing" in name || ":8384" in url ->
                 SyncthingActivity::class.java
-            // v0.9.1+ 继续加：immich / jellyfin / navidrome / vaultwarden / adguard
+            // DNS / 拦截
+            "adguard" in name || ":3000" in url ->
+                AdGuardActivity::class.java
+            // 相册
+            "immich" in name || svc.type == ServiceType.PHOTO ->
+                ImmichActivity::class.java
+            // 影视
+            "jellyfin" in name || "emby" in name || svc.type == ServiceType.VIDEO ->
+                JellyfinActivity::class.java
+            // 音乐
+            "navidrome" in name || "subsonic" in name || svc.type == ServiceType.MUSIC ->
+                NavidromeActivity::class.java
+            // 密码
+            "vaultwarden" in name || "bitwarden" in name || svc.type == ServiceType.PASSWORD ->
+                VaultwardenActivity::class.java
             else -> null
         }
     }
