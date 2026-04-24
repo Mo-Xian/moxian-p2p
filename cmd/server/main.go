@@ -1,11 +1,15 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/cp12064/moxian-p2p/internal/server"
 )
@@ -25,6 +29,10 @@ func main() {
 	virtualSubnet := flag.String("virtual-subnet", "", "虚拟网 CIDR 例 10.88.0.0/24（留空=关闭 vIP 自动分配）")
 	vipStore := flag.String("vip-store", "", "vIP 分配持久化文件 例 /var/lib/moxian/vip.json")
 	configFile := flag.String("config", "", "YAML 配置文件路径（CLI flag 优先）")
+	// ---- v2 新增 ----
+	dbPath := flag.String("db", "moxian.db", "SQLite 数据库路径")
+	jwtSecret := flag.String("jwt-secret", "", "JWT 签名密钥（32+ 字节 留空则随机生成 重启后所有 token 失效）")
+	jwtTTL := flag.Duration("jwt-ttl", 24*time.Hour, "JWT 有效期")
 	flag.Parse()
 
 	// 合并配置文件
@@ -146,10 +154,42 @@ func main() {
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("ok"))
 	})
-	if *adminUser != "" && *adminPass != "" {
+	// ---- v2 API 初始化 ----
+	db, err := server.OpenDB(*dbPath)
+	if err != nil {
+		log.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+
+	secret := *jwtSecret
+	if secret == "" {
+		b := make([]byte, 32)
+		rand.Read(b)
+		secret = hex.EncodeToString(b)
+		log.Printf("[jwt] 未提供 -jwt-secret 随机生成（重启后所有登录会失效）")
+	}
+	jwtMgr := server.NewJWTManager(secret, *jwtTTL)
+
+	// v2 API 注册
+	publicWS := fmt.Sprintf("ws://%s%s/ws", *publicHost, *wsAddr)
+	if *tlsCert != "" {
+		publicWS = fmt.Sprintf("wss://%s%s/ws", *publicHost, *wsAddr)
+	}
+	publicUDP := fmt.Sprintf("%s%s", *publicHost, *udpAddr)
+
+	(&server.AuthAPI{DB: db, JWT: jwtMgr}).Register(mux)
+	(&server.VaultAPI{DB: db, JWT: jwtMgr}).Register(mux)
+	(&server.ConfigAPI{DB: db, JWT: jwtMgr, ServerWS: publicWS, ServerUDP: publicUDP}).Register(mux)
+	(&server.AdminAPI{DB: db, JWT: jwtMgr}).Register(mux)
+	(&server.WebPanel{}).Register(mux)
+	log.Printf("[v2] auth / vault / config / admin API enabled")
+	log.Printf("[v2] web panel at http(s)://%s%s/", *publicHost, *wsAddr)
+
+	// ---- 老的 admin 面板 兼容保留（用 env MOXIAN_ADMIN_LEGACY=1 启用）----
+	if os.Getenv("MOXIAN_ADMIN_LEGACY") == "1" && *adminUser != "" && *adminPass != "" {
 		admin := &server.AdminPanel{Hub: sig.Hub, Relay: udp, User: *adminUser, Pass: *adminPass}
 		admin.Register(mux)
-		log.Printf("[admin] panel enabled at /admin (user=%s)", *adminUser)
+		log.Printf("[admin] legacy panel enabled at /admin (user=%s)", *adminUser)
 	}
 	server.RegisterMetrics(mux, sig.Hub, udp)
 	log.Printf("[metrics] Prometheus endpoint /metrics")
