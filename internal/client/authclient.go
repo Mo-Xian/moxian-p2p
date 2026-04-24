@@ -3,6 +3,7 @@ package client
 import (
 	"bytes"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -23,10 +24,14 @@ type AuthClient struct {
 }
 
 // NewAuthClient base URL 如 https://vps.example.com:7788
-func NewAuthClient(baseURL string) *AuthClient {
+// insecureTLS=true 时跳过证书验证（自签证书场景）
+func NewAuthClient(baseURL string, insecureTLS bool) *AuthClient {
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: insecureTLS},
+	}
 	return &AuthClient{
 		ServerURL: strings.TrimRight(baseURL, "/"),
-		HTTP:      &http.Client{Timeout: 15 * time.Second},
+		HTTP:      &http.Client{Timeout: 15 * time.Second, Transport: tr},
 	}
 }
 

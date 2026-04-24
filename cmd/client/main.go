@@ -53,6 +53,7 @@ func main() {
 		loginSrv   = flag.String("login", "", "v2 模式：moxian-server HTTPS 地址 例 https://vps.example.com:7788")
 		loginEmail = flag.String("email", "", "v2 模式：登录邮箱")
 		loginPwd   = flag.String("password", "", "v2 模式：主密码（强烈建议用环境变量 MOXIAN_PASSWORD）")
+		insecure   = flag.Bool("insecure-tls", false, "v2 模式：跳过 TLS 证书验证（自签证书用）")
 		forwards   forwardFlag
 	)
 	flag.Var(&forwards, "forward", "主动侧端口映射 LOCAL=PEER=TARGET 可多次")
@@ -67,7 +68,7 @@ func main() {
 		if *loginEmail == "" || pwd == "" {
 			log.Fatal("v2 模式需要 -email 和 -password（或 MOXIAN_PASSWORD 环境变量）")
 		}
-		ac := client.NewAuthClient(*loginSrv)
+		ac := client.NewAuthClient(*loginSrv, *insecure)
 		if _, err := ac.Login(*loginEmail, pwd); err != nil {
 			log.Fatalf("v2 登录失败: %v", err)
 		}
