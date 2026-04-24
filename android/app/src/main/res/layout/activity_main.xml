@@ -175,7 +175,7 @@
                 android:layout_height="wrap_content"
                 android:padding="24dp"
                 android:gravity="center"
-                android:text="还没有配置 NAS 服务\n点击右上角"管理"导入常用模板"
+                android:text="还没有配置 NAS 服务\n点击右上角 管理 按钮导入常用模板"
                 android:textColor="@color/text_secondary"
                 android:textSize="13sp"
                 android:background="@color/bg_card"/>
