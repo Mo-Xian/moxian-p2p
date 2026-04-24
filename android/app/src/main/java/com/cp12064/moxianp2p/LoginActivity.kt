@@ -52,6 +52,22 @@ class LoginActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // 桌面长按图标 → "检查更新"快捷方式
+        if (intent?.getBooleanExtra("check_update", false) == true) {
+            lifecycleScope.launch {
+                val release = AppUpdater.checkLatest(BuildConfig.VERSION_NAME)
+                if (release != null) {
+                    AppUpdater.promptAndUpdate(this@LoginActivity, release, BuildConfig.VERSION_NAME)
+                } else {
+                    android.widget.Toast.makeText(
+                        this@LoginActivity, "已是最新版 v${BuildConfig.VERSION_NAME}",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+            // 不 return 继续正常流程
+        }
+
         // 已登录 → 直接跳主界面
         if (AuthSession.isLoggedIn()) {
             goMain()

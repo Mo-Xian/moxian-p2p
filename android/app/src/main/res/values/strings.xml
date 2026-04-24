@@ -20,4 +20,8 @@
     <string name="status_running">运行中</string>
     <string name="copied">日志已复制到剪贴板</string>
     <string name="cb_mesh">启用 Mesh 自动组网（保活 + 预热连接，耗电略增）</string>
+    <string name="shortcut_check_update_short">检查更新</string>
+    <string name="shortcut_check_update_long">检查 APP 新版本</string>
+    <string name="shortcut_services_short">NAS 服务</string>
+    <string name="shortcut_services_long">快速打开 NAS 服务列表</string>
 </resources>

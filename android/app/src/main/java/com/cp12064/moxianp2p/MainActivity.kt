@@ -596,29 +596,24 @@ class MainActivity : AppCompatActivity() {
     }
 
     // ---- 自动升级检查 ----
-    private fun checkForUpdate() {
-        lifecycleScope.launch(Dispatchers.IO) {
-            val tag = try {
-                val url = URL("https://api.github.com/repos/Mo-Xian/moxian-p2p/releases/latest")
-                val conn = url.openConnection() as HttpURLConnection
-                conn.setRequestProperty("Accept", "application/vnd.github+json")
-                conn.connectTimeout = 5_000
-                conn.readTimeout = 5_000
-                val json = conn.inputStream.bufferedReader().use { it.readText() }
-                Regex("""\"tag_name\"\s*:\s*\"([^\"]+)\"""").find(json)?.groupValues?.get(1)
-            } catch (_: Exception) { null } ?: return@launch
-
-            val latestClean = tag.removePrefix("v")
+    // 默认 silent=true：发现新版在顶部横幅显示 点击弹详细对话框
+    // silent=false（用户手动触发）：无论是否有新版都弹 toast
+    private fun checkForUpdate(silent: Boolean = true) {
+        lifecycleScope.launch {
             val current = BuildConfig.VERSION_NAME
-            if (latestClean != current) {
-                withContext(Dispatchers.Main) {
-                    binding.tvUpdate.visibility = View.VISIBLE
-                    binding.tvUpdate.text = "🔔 发现新版 $tag（当前 v$current）点此下载"
-                    binding.tvUpdate.setOnClickListener {
-                        val uri = Uri.parse("https://github.com/Mo-Xian/moxian-p2p/releases/tag/$tag")
-                        try { startActivity(Intent(Intent.ACTION_VIEW, uri)) } catch (_: Exception) {}
-                    }
-                }
+            val release = AppUpdater.checkLatest(current)
+            if (release == null) {
+                if (!silent) toast("已是最新版 v$current")
+                return@launch
+            }
+            // 顶部横幅 + 点击打开对话框
+            binding.tvUpdate.visibility = View.VISIBLE
+            binding.tvUpdate.text = "🔔 发现新版 ${release.tag}（当前 v$current）点此更新"
+            binding.tvUpdate.setOnClickListener {
+                AppUpdater.promptAndUpdate(this@MainActivity, release, current)
+            }
+            if (!silent) {
+                AppUpdater.promptAndUpdate(this@MainActivity, release, current)
             }
         }
     }

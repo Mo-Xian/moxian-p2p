@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="check_update"
+        android:enabled="true"
+        android:icon="@android:drawable/ic_popup_sync"
+        android:shortcutShortLabel="@string/shortcut_check_update_short"
+        android:shortcutLongLabel="@string/shortcut_check_update_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.cp12064.moxianp2p"
+            android:targetClass="com.cp12064.moxianp2p.LoginActivity">
+            <!-- 传 extra 让 Activity 知道该主动触发 check -->
+            <extra android:name="check_update" android:value="true" />
+        </intent>
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="service_launcher"
+        android:enabled="true"
+        android:icon="@android:drawable/ic_menu_manage"
+        android:shortcutShortLabel="@string/shortcut_services_short"
+        android:shortcutLongLabel="@string/shortcut_services_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.cp12064.moxianp2p"
+            android:targetClass="com.cp12064.moxianp2p.ServiceLauncherActivity"/>
+    </shortcut>
+</shortcuts>

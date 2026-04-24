@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- ExternalFilesDir/Download 里的 APK 可被系统安装器读取 -->
+    <external-files-path
+        name="download"
+        path="Download/" />
+</paths>
