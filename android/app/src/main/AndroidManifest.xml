@@ -51,6 +51,27 @@
             android:parentActivityName=".MainActivity"
             android:label="NAS 服务" />
 
+        <!-- NAS 服务内置客户端 -->
+        <activity
+            android:name=".WebViewActivity"
+            android:exported="false"
+            android:parentActivityName=".ServiceLauncherActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:hardwareAccelerated="true"
+            android:label="Web" />
+
+        <activity
+            android:name=".QBittorrentActivity"
+            android:exported="false"
+            android:parentActivityName=".ServiceLauncherActivity"
+            android:label="qBittorrent" />
+
+        <activity
+            android:name=".SyncthingActivity"
+            android:exported="false"
+            android:parentActivityName=".ServiceLauncherActivity"
+            android:label="Syncthing" />
+
         <!-- VpnService 不需要 foregroundServiceType 系统会自动把它当前台服务 -->
         <service
             android:name=".MoxianVpnService"

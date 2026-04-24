@@ -9,6 +9,7 @@ import org.json.JSONObject
 import java.util.UUID
 
 // NAS 服务条目 存在 SharedPreferences 里 供启动器列表渲染
+// 认证 token 各服务客户端自己管 不存在这里（避免泄漏 也便于 QR 分享时不带密码）
 data class NasService(
     val id: String = UUID.randomUUID().toString(),
     val name: String,
@@ -30,6 +31,10 @@ data class NasService(
             type = runCatching { ServiceType.valueOf(o.optString("type", "OTHER")) }
                 .getOrDefault(ServiceType.OTHER),
         )
+
+        // 从 id 加载（QBittorrentActivity 等通过 svc_id 取完整对象）
+        fun findById(ctx: Context, id: String): NasService? =
+            NasServiceStore.load(ctx).firstOrNull { it.id == id }
     }
 }
 
@@ -101,57 +106,82 @@ object NasServiceStore {
     }
 }
 
-// 按服务类别决定打开方式：优先尝试已知专业 APP 的 deeplink 失败回退浏览器
+// 按服务类型路由到最合适的打开方式
+// 优先级：内置客户端 Activity > 已装原生 APP（deeplink）> APP 内 WebView
 object ServiceLauncher {
-    // 常见专业 APP 的包名（用户已装时优先用它们打开）
+    // 常见专业 APP 的包名（用户已装时可提供"打开原生 APP"选项）
     private val knownApps: Map<ServiceType, List<String>> = mapOf(
         ServiceType.VIDEO to listOf(
-            "org.jellyfin.mobile",           // Jellyfin 官方
-            "com.infuse7.Infuse",            // Infuse（iOS 为主 Android 少）
-            "dev.jdtech.jellyfin",           // Findroid
+            "org.jellyfin.mobile",
+            "dev.jdtech.jellyfin",
         ),
         ServiceType.MUSIC to listOf(
-            "app.symfonik.music.player",     // Symfonium
-            "com.simplecity.amp.pro",        // Shuttle+
+            "app.symfonik.music.player",
         ),
         ServiceType.PHOTO to listOf(
-            "app.alextran.immich",           // Immich
+            "app.alextran.immich",
         ),
     )
 
+    // 内置轻量客户端映射：v0.9.x 陆续加 判断服务 URL 特征决定是否用内置
+    // 内置客户端主打"80% 日常操作"复杂功能仍建议跳原生 APP
+    private fun builtInActivity(svc: NasService): Class<*>? {
+        val name = svc.name.lowercase()
+        val url = svc.url.lowercase()
+        return when {
+            "qbittorrent" in name || "qbit" in name || ":8081" in url || ":8080/" in url && "vault" !in name ->
+                QBittorrentActivity::class.java
+            "syncthing" in name || ":8384" in url ->
+                SyncthingActivity::class.java
+            // v0.9.1+ 继续加：immich / jellyfin / navidrome / vaultwarden / adguard
+            else -> null
+        }
+    }
+
     fun open(ctx: Context, svc: NasService) {
-        // 先试已知专业 APP
+        // 1. 有内置客户端走内置
+        builtInActivity(svc)?.let { cls ->
+            val intent = Intent(ctx, cls).apply {
+                putExtra("svc_id", svc.id)
+            }
+            try { ctx.startActivity(intent); return } catch (_: Exception) {}
+        }
+
+        // 2. 未来：Web UI 内嵌（WebViewActivity）
+        val intent = Intent(ctx, WebViewActivity::class.java).apply {
+            putExtra("svc_id", svc.id)
+        }
+        try {
+            ctx.startActivity(intent)
+        } catch (e: Exception) {
+            android.widget.Toast.makeText(ctx, "打开失败: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // 辅助：让用户选择跳转到原生 APP（如已装）从内置客户端 Activity 里调用
+    fun tryOpenNative(ctx: Context, svc: NasService): Boolean {
         val pm = ctx.packageManager
         knownApps[svc.type]?.forEach { pkg ->
             if (isInstalled(pm, pkg)) {
-                // 让 APP 自己处理 URL（多数专业 APP 支持通过 Intent 接收 URL）
                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse(svc.url)).apply {
                     setPackage(pkg)
                 }
-                try {
-                    ctx.startActivity(intent)
-                    return
-                } catch (_: Exception) {
-                    // 继续下一个
-                }
+                try { ctx.startActivity(intent); return true } catch (_: Exception) {}
             }
         }
-        // 兜底：浏览器打开 URL
-        val fallback = Intent(Intent.ACTION_VIEW, Uri.parse(svc.url))
+        return false
+    }
+
+    // 辅助：打开系统浏览器（WebViewActivity 里"外部浏览器打开"按钮用）
+    fun openInExternalBrowser(ctx: Context, url: String) {
         try {
-            ctx.startActivity(fallback)
+            ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
         } catch (e: Exception) {
-            // 没浏览器？极端情况 toast 提示
-            android.widget.Toast.makeText(
-                ctx, "无法打开 ${svc.url}: ${e.message}", android.widget.Toast.LENGTH_SHORT
-            ).show()
+            android.widget.Toast.makeText(ctx, "打开失败: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
         }
     }
 
     private fun isInstalled(pm: PackageManager, pkg: String): Boolean = try {
-        pm.getPackageInfo(pkg, 0)
-        true
-    } catch (_: PackageManager.NameNotFoundException) {
-        false
-    }
+        pm.getPackageInfo(pkg, 0); true
+    } catch (_: PackageManager.NameNotFoundException) { false }
 }

@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/bg">
+
+    <!-- 标题栏 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="@color/bg_card"
+        android:padding="10dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:text="qBittorrent"
+            android:textSize="16sp"
+            android:textColor="@color/accent"
+            android:textStyle="bold"/>
+
+        <Button
+            android:id="@+id/btn_add"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:minHeight="36dp"
+            android:minWidth="56dp"
+            android:paddingHorizontal="10dp"
+            android:text="+ 添加"
+            android:textSize="12sp"
+            android:backgroundTint="@color/accent"
+            android:textColor="@color/bg"
+            android:layout_marginEnd="6dp"/>
+
+        <Button
+            android:id="@+id/btn_web"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:minHeight="36dp"
+            android:minWidth="56dp"
+            android:paddingHorizontal="10dp"
+            android:text="Web"
+            android:textSize="12sp"/>
+    </LinearLayout>
+
+    <!-- 状态条 -->
+    <TextView
+        android:id="@+id/tv_status"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="8dp"
+        android:background="@color/bg_card"
+        android:textSize="12sp"
+        android:textColor="@color/text_secondary"
+        android:fontFamily="monospace"
+        android:layout_marginTop="1dp"
+        tools:text="加载中..."
+        xmlns:tools="http://schemas.android.com/tools"/>
+
+    <!-- 种子列表 -->
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/rv_torrents"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_marginTop="8dp"
+        android:clipToPadding="false"
+        android:paddingBottom="8dp"/>
+</LinearLayout>
