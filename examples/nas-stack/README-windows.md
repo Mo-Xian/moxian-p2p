@@ -87,22 +87,68 @@ IP 查询：
 ipconfig | Select-String "IPv4"
 ```
 
-## 五、moxian-p2p 远程访问（Windows 下用原生 exe）
+## 五、moxian-p2p 远程访问
 
-Windows / Docker Desktop 下**不要跑 moxian 容器**（TUN + host 网络在 WSL2 不稳）。用原生 Windows 版的 `moxian-gui.exe`（带托盘 UI）：
+两种选法：**容器版 responder**（最简 跟其他应用一起管）或 **原生 exe TUN**（最透明 要管理员）。
 
-1. 从 [Release 页](https://github.com/Mo-Xian/moxian-p2p/releases/latest) 下载 `moxian-gui.exe` + `wintun.dll` + `client.yaml`（模板 `configs\moxian\client.yaml.example`）
-2. 放到同一文件夹
-3. **右键 `moxian-gui.exe` → 以管理员身份运行**（TUN 驱动需要管理员）
-4. 托盘图标右键菜单：启动 / 停止 / 编辑配置
+### 5.1 容器版 responder（Windows 也能跑）⭐
 
-启动后手机装 moxian-p2p APP 接入同一 mesh，就能从外网通过虚拟 IP 访问这台 Windows 上的 Jellyfin / Immich 等。
+**原理**：moxian-client 容器不开 TUN，只做"对端来访问我 转发给 Docker 服务"。手机在 APP 里配 forward 规则指向 NAS 的 Docker 服务名。
 
-Linux 真机想把 moxian 也塞到 Docker 里？用 overlay：
+**一次性启动**：
 
-```bash
+```powershell
+# 编辑 NAS 端配置
+copy configs\moxian\client.yaml.example configs\moxian\client.yaml
+notepad configs\moxian\client.yaml
+# 改三个字段：
+#   server: wss://你的VPS:8443/ws
+#   udp:    你的VPS:7000
+#   pass:   和手机端相同的强密码
+
+# 启动应用栈 + moxian 容器（首次本地 build Dockerfile 约 1 分钟）
 docker compose -f docker-compose.yml -f docker-compose.moxian.yml up -d
 ```
+
+**手机 APP 配置**（moxian-p2p Android APK）：
+
+主页"Forwards"字段一行一条：
+
+```
+127.0.0.1:18096=home-nas=jellyfin:8096
+127.0.0.1:12283=home-nas=immich-server:2283
+127.0.0.1:18384=home-nas=syncthing:8384
+```
+
+手机启动 VPN 后：
+- 看 Jellyfin：`http://127.0.0.1:18096`
+- 看 Immich：`http://127.0.0.1:12283`
+
+本质上手机本地端口 → moxian mesh → NAS 容器 → Docker 服务名解析 → 对应容器。**零 TUN 任何 Android 都能跑**。
+
+### 5.2 原生 moxian-gui.exe（需要管理员 但体验更透明）
+
+想在电脑上像接入 Tailscale 那样直接 ping 家里所有设备？用原生 TUN 版：
+
+1. 从 [Release 页](https://github.com/Mo-Xian/moxian-p2p/releases/latest) 下载 `moxian-gui.exe` + `wintun.dll`
+2. 放到同一文件夹 + 准备好 `client.yaml`（要开 `mesh: true` + `virtual_ip: auto`）
+3. **右键 `moxian-gui.exe` → 以管理员身份运行**
+4. 托盘图标右键菜单：启动 / 停止 / 编辑配置
+
+启动后本机有 TUN 虚拟网卡，直接 ping mesh 里其他节点（手机、其他 NAS）。
+
+### 5.3 两种方式对比
+
+| 维度 | 容器版 responder | 原生 exe TUN |
+|------|----------------|-------------|
+| 安装 | `docker compose` 一条 | 下载 exe + wintun.dll |
+| 需要管理员 | ❌ | ✅（TUN 驱动）|
+| 手机访问 NAS 服务 | ✅ 配 forward 规则 | ✅ 直接用虚拟 IP |
+| PC 访问家里路由器 Web / 其他局域网设备 | ❌ | ✅ |
+| Windows Docker Desktop | ✅ | N/A |
+| 管理方便 | ⭐ 和 Docker 应用一起 | 独立进程 |
+
+**多数家用场景推荐 5.1 容器版** —— 和 NAS 应用栈统一管理，迁移时只搬 `D:\nas-data`。
 
 ---
 

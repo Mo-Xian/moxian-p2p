@@ -62,7 +62,20 @@ cd moxian-p2p\examples\nas-stack
 # 3. 浏览器 http://localhost:2283 (Immich) / :8096 (Jellyfin) 等
 ```
 
-无需手动改任何 CHANGEME 密码，脚本自动生成并打印到终端。远程访问用原生 `moxian-gui.exe`（不用容器），详见 [`README-windows.md`](README-windows.md)。
+无需手动改任何 CHANGEME 密码，脚本自动生成并打印到终端。
+
+**想加远程访问？** 最简路径是把 moxian-p2p 也跑成容器（Windows / Linux 都适用）：
+
+```powershell
+# 编辑 NAS 端配置 填 server/udp/pass
+copy configs\moxian\client.yaml.example configs\moxian\client.yaml
+notepad configs\moxian\client.yaml
+
+# 加 overlay 一起启动（首次本地 build 约 1 分钟）
+docker compose -f docker-compose.yml -f docker-compose.moxian.yml up -d
+```
+
+详见 [`README-windows.md` 第五节](README-windows.md#五moxian-p2p-远程访问)。
 
 ### 访问
 

@@ -1,37 +1,48 @@
-# moxian-p2p 客户端配置 — NAS 节点
-# 复制为 client.yaml 后修改 bootstrap.sh 也会检查此文件存在
+# moxian-p2p NAS 端 responder 配置
+# Docker 容器内读取路径：/etc/moxian/client.yaml
+# 宿主机路径：examples/nas-stack/configs/moxian/client.yaml
+#
+# 模式：纯 responder 不开 TUN 不主动连对端
+#       对端（手机/笔记本）通过 mesh 打洞来连 本端转发到 Docker 网络内的服务
+#
+# 启动：docker compose -f docker-compose.yml -f docker-compose.moxian.yml up -d
 
-# 节点标识 全局唯一
+# 本节点 ID 全局唯一 对端用这个名字找你
 node_id: home-nas
 
-# 信令服务器（VPS 或 Oracle Free Tier 跑 moxian-server）
-server: wss://your-signal.example.com:8443
-udp: your-signal.example.com:7000
+# 信令服务器（你自己的 VPS 跑 moxian-server）
+# 和对端必须一致
+server: wss://your-signal-vps.example.com:8443
+udp:    your-signal-vps.example.com:7000
 
-# 所有节点必须一致 KCP AES 派生密钥
-passphrase: CHANGEME-strong-shared-passphrase
+# 双方必须一致 KCP AES 派生密钥 别泄漏
+pass: CHANGEME-shared-passphrase
 
-# 标签（便于其他节点识别）
+# 不开 TUN 不分配虚拟 IP → Windows Docker Desktop 友好
+# virtual_ip: （留空）
+# mesh: false （留空/默认 false）
+
+# 标签 方便其他节点识别你 可选
 tags:
   - role=nas
   - location=home
 
-# 只允许可信节点连入 过滤陌生接入
+# 只允许这些对端连入（白名单）避免陌生人接入 mesh
+# 空或注释掉则接受任意对端
 allow_peers:
   - role=owner
   - role=family
 
-# TUN 虚拟网卡 vIP 自动分配
-virtual_ip: auto
+# 允许对端 dial 的目标 host:port 白名单
+# 容器化部署 target 写 Docker service 名字（同一 nas 网络内 DNS 解析）
+allow_targets:
+  - "jellyfin:8096"
+  - "immich-server:2283"
+  - "syncthing:8384"
+  - "vaultwarden:80"
+  - "qbittorrent:8081"
+  # 也可以允许宿主 IP 如 192.168.1.100:22 做 SSH 跳板
+  # - "192.168.1.100:22"
 
-# Mesh 自动与下列节点建立 P2P 隧道
-mesh: true
-mesh_pool:
-  - phone
-  - laptop
-
-# 客户端出站限速（字节/秒）0 = 不限
-rate_limit: 0
-
-# 详细日志 排障时开
+# 详细日志（排障时开）
 verbose: false
