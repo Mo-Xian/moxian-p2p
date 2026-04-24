@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">moxian-p2p</string>
-    <string name="hint_node_id">Node ID 例 phone</string>
-    <string name="hint_server">Server WS 例 ws://139.224.1.83:7788/ws</string>
-    <string name="hint_udp">Server UDP 例 139.224.1.83:7789</string>
-    <string name="hint_token">Token（可选）</string>
-    <string name="hint_pass">Passphrase（双方一致）</string>
-    <string name="hint_vip">Virtual IP 填 auto 让 server 分配 或 10.88.0.X</string>
-    <string name="hint_forwards">Forwards 一行一条 LOCAL=PEER=TARGET\n例 127.0.0.1:18080=winpc=127.0.0.1:8000</string>
+    <string name="hint_node_id">节点名（自动生成）可以改</string>
+    <string name="hint_server">信令服务器 例 wss://vps.example.com:8443/ws</string>
+    <string name="hint_udp">信令 UDP 例 vps.example.com:7000</string>
+    <string name="hint_token">Token（可选 一般不用）</string>
+    <string name="hint_pass">密码（和 NAS 完全一致）</string>
+    <string name="hint_vip">虚拟 IP 默认 auto 自动分配</string>
+    <string name="hint_forwards">端口转发（可选）一行一条\nLOCAL=PEER=TARGET 例 127.0.0.1:18080=winpc=127.0.0.1:8000</string>
     <string name="btn_start">启动</string>
     <string name="btn_stop">停止</string>
     <string name="btn_test">测试</string>

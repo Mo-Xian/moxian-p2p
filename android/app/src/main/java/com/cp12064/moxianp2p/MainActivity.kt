@@ -116,6 +116,12 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(this, ServiceLauncherActivity::class.java))
         }
 
+        // 高级选项折叠：默认收起 勾选后显示 node_id / vip / token / forwards / mesh
+        binding.cbAdvanced.setOnCheckedChangeListener { _, isChecked ->
+            binding.advancedSection.visibility = if (isChecked) View.VISIBLE else View.GONE
+            prefs.edit().putBoolean("show_advanced", isChecked).apply()
+        }
+
         observeControllerState()
     }
 
@@ -361,14 +367,35 @@ class MainActivity : AppCompatActivity() {
 
     // ---- 配置持久化 ----
     private fun restoreConfig() {
-        binding.etNodeId.setText(prefs.getString("node_id", "phone"))
-        binding.etServer.setText(prefs.getString("server", "ws://139.224.1.83:7788/ws"))
-        binding.etUdp.setText(prefs.getString("udp", "139.224.1.83:7789"))
+        // node_id 首次启动自动生成并立即持久化 下次打开保持同一 ID
+        val savedNodeId = prefs.getString("node_id", null)
+        val nodeId = if (savedNodeId.isNullOrBlank()) {
+            val auto = autoNodeId()
+            prefs.edit().putString("node_id", auto).apply()
+            auto
+        } else savedNodeId
+        binding.etNodeId.setText(nodeId)
+
+        binding.etServer.setText(prefs.getString("server", ""))
+        binding.etUdp.setText(prefs.getString("udp", ""))
         binding.etToken.setText(prefs.getString("token", ""))
         binding.etPass.setText(prefs.getString("pass", ""))
         binding.etVip.setText(prefs.getString("vip", "auto"))
         binding.etForwards.setText(prefs.getString("forwards", ""))
         binding.cbMesh.isChecked = prefs.getBoolean("mesh", true)
+
+        // 高级选项默认收起
+        val showAdvanced = prefs.getBoolean("show_advanced", false)
+        binding.cbAdvanced.isChecked = showAdvanced
+        binding.advancedSection.visibility = if (showAdvanced) View.VISIBLE else View.GONE
+    }
+
+    // autoNodeId 首次使用时自动生成一个唯一 node_id
+    // 比如 "phone-小米13-3F8A" 既容易辨识又避免冲突
+    private fun autoNodeId(): String {
+        val model = Build.MODEL.replace(Regex("[^a-zA-Z0-9\u4e00-\u9fa5]"), "").take(10)
+        val suffix = (0..3).map { "0123456789ABCDEF".random() }.joinToString("")
+        return "phone-$model-$suffix".ifEmpty { "phone-$suffix" }
     }
 
     private fun saveConfig() {

@@ -150,16 +150,7 @@
                         android:textSize="12sp"/>
                 </LinearLayout>
 
-                <EditText
-                    android:id="@+id/et_node_id"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:hint="@string/hint_node_id"
-                    android:inputType="text"
-                    android:textColor="@color/text_primary"
-                    android:textColorHint="@color/text_secondary"
-                    android:text="phone"/>
-
+                <!-- ⭐ 必填 3 项（简单模式唯一可见的字段）-->
                 <EditText
                     android:id="@+id/et_server"
                     android:layout_width="match_parent"
@@ -179,15 +170,6 @@
                     android:textColorHint="@color/text_secondary"/>
 
                 <EditText
-                    android:id="@+id/et_token"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:hint="@string/hint_token"
-                    android:inputType="textPassword"
-                    android:textColor="@color/text_primary"
-                    android:textColorHint="@color/text_secondary"/>
-
-                <EditText
                     android:id="@+id/et_pass"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -196,36 +178,75 @@
                     android:textColor="@color/text_primary"
                     android:textColorHint="@color/text_secondary"/>
 
-                <EditText
-                    android:id="@+id/et_vip"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:hint="@string/hint_vip"
-                    android:inputType="text"
-                    android:textColor="@color/text_primary"
-                    android:textColorHint="@color/text_secondary"
-                    android:text="auto"/>
-
-                <EditText
-                    android:id="@+id/et_forwards"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:hint="@string/hint_forwards"
-                    android:inputType="textMultiLine"
-                    android:minLines="2"
-                    android:maxLines="5"
-                    android:textColor="@color/text_primary"
-                    android:textColorHint="@color/text_secondary"/>
-
+                <!-- 高级选项开关 -->
                 <CheckBox
-                    android:id="@+id/cb_mesh"
+                    android:id="@+id/cb_advanced"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="@string/cb_mesh"
+                    android:text="高级选项（大多数人不用改）"
                     android:textColor="@color/text_secondary"
-                    android:textSize="13sp"
-                    android:layout_marginTop="4dp"
+                    android:textSize="12sp"
+                    android:layout_marginTop="6dp"
                     android:buttonTint="@color/accent"/>
+
+                <!-- 高级字段 默认隐藏 勾"高级选项"展开 -->
+                <LinearLayout
+                    android:id="@+id/advanced_section"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <EditText
+                        android:id="@+id/et_node_id"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="@string/hint_node_id"
+                        android:inputType="text"
+                        android:textColor="@color/text_primary"
+                        android:textColorHint="@color/text_secondary"/>
+
+                    <EditText
+                        android:id="@+id/et_vip"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="@string/hint_vip"
+                        android:inputType="text"
+                        android:textColor="@color/text_primary"
+                        android:textColorHint="@color/text_secondary"
+                        android:text="auto"/>
+
+                    <EditText
+                        android:id="@+id/et_token"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="@string/hint_token"
+                        android:inputType="textPassword"
+                        android:textColor="@color/text_primary"
+                        android:textColorHint="@color/text_secondary"/>
+
+                    <EditText
+                        android:id="@+id/et_forwards"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:hint="@string/hint_forwards"
+                        android:inputType="textMultiLine"
+                        android:minLines="2"
+                        android:maxLines="5"
+                        android:textColor="@color/text_primary"
+                        android:textColorHint="@color/text_secondary"/>
+
+                    <CheckBox
+                        android:id="@+id/cb_mesh"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/cb_mesh"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="13sp"
+                        android:layout_marginTop="4dp"
+                        android:buttonTint="@color/accent"/>
+
+                </LinearLayout>
 
             </LinearLayout>
 
