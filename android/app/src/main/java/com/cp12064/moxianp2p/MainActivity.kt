@@ -82,11 +82,28 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // v2 登录门禁：未登录跳 LoginActivity 未解锁跳 UnlockActivity
+        if (!AuthSession.isLoggedIn()) {
+            if (!AuthSession.restoreFromDisk(this)) {
+                startActivity(Intent(this, LoginActivity::class.java))
+                finish()
+                return
+            }
+        }
+        if (!AuthSession.isUnlocked()) {
+            startActivity(Intent(this, UnlockActivity::class.java))
+            finish()
+            return
+        }
+
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
         binding.tvLog.movementMethod = ScrollingMovementMethod()
         restoreConfig()
+        // v2：从服务器拉 moxian-p2p 配置自动填入
+        fetchServerConfigAsync()
         requestNotificationPermissionIfNeeded()
 
         // 首次进入时 打印上次崩溃日志
@@ -396,6 +413,55 @@ class MainActivity : AppCompatActivity() {
         val model = Build.MODEL.replace(Regex("[^a-zA-Z0-9\u4e00-\u9fa5]"), "").take(10)
         val suffix = (0..3).map { "0123456789ABCDEF".random() }.joinToString("")
         return "phone-$model-$suffix".ifEmpty { "phone-$suffix" }
+    }
+
+    /**
+     * v2：从服务器拉 moxian-p2p 配置（node_id / virtual_ip / pass / server_ws / server_udp / allow_peers）
+     * 自动填入 UI 用户无需手动配置
+     *
+     * 流程：
+     *   1. 先尝试 GET /api/config?node=<my_node_id> 拿已注册节点配置
+     *   2. 若 404（节点未注册）POST /api/nodes {node_id} 注册一个
+     *   3. 再 GET 一次拿配置
+     */
+    private fun fetchServerConfigAsync() {
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val nodeId = binding.etNodeId.text.toString().trim().ifEmpty { autoNodeId() }
+                var resp = AuthSession.httpGet(this@MainActivity, "/api/config?node=$nodeId")
+                if (resp == null) {
+                    // 尝试注册节点
+                    val regBody = org.json.JSONObject().put("node_id", nodeId).toString()
+                    AuthSession.httpPostJson(this@MainActivity, "/api/nodes", regBody)
+                    resp = AuthSession.httpGet(this@MainActivity, "/api/config?node=$nodeId")
+                }
+                if (resp == null) {
+                    appendLogSafe("[v2] 从服务器拉配置失败 将用本地缓存")
+                    return@launch
+                }
+                val cfg = org.json.JSONObject(resp)
+                val srv = cfg.optString("server_ws")
+                val udp = cfg.optString("server_udp")
+                val pass = cfg.optString("pass")
+                val vip = cfg.optString("virtual_ip")
+                val mesh = cfg.optBoolean("mesh", true)
+                withContext(Dispatchers.Main) {
+                    if (srv.isNotEmpty()) binding.etServer.setText(srv)
+                    if (udp.isNotEmpty()) binding.etUdp.setText(udp)
+                    if (pass.isNotEmpty()) binding.etPass.setText(pass)
+                    if (vip.isNotEmpty()) binding.etVip.setText(vip)
+                    binding.etNodeId.setText(nodeId)
+                    binding.cbMesh.isChecked = mesh
+                    appendLogSafe("[v2] 配置已从服务器同步: vip=$vip")
+                }
+            } catch (e: Exception) {
+                appendLogSafe("[v2] 配置同步异常: ${e.message}")
+            }
+        }
+    }
+
+    private fun appendLogSafe(line: String) {
+        runOnUiThread { appendLog(line) }
     }
 
     private fun saveConfig() {

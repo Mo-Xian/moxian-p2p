@@ -1,0 +1,205 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="🌐 moxian-p2p"
+            android:textSize="28sp"
+            android:textStyle="bold"
+            android:textColor="@color/accent"
+            android:gravity="center"
+            android:paddingVertical="24dp"/>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="端到端加密 · 零知识 · 自托管"
+            android:textSize="12sp"
+            android:textColor="@color/text_secondary"
+            android:gravity="center"
+            android:paddingBottom="32dp"/>
+
+        <!-- Tab 切换 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="16dp">
+
+            <Button
+                android:id="@+id/btn_tab_login"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="登录"
+                android:textSize="13sp"
+                android:backgroundTint="@color/accent"
+                android:textColor="@color/bg"
+                android:layout_marginEnd="4dp"/>
+
+            <Button
+                android:id="@+id/btn_tab_register"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="注册"
+                android:textSize="13sp"
+                android:backgroundTint="@color/bg_card"
+                android:textColor="@color/accent"
+                android:layout_marginStart="4dp"/>
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@color/bg_card"
+            android:padding="16dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="服务器 URL"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp"/>
+
+            <EditText
+                android:id="@+id/et_server"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="https://your.vps.com:7788"
+                android:inputType="textUri"
+                android:textColor="@color/text_primary"
+                android:textColorHint="@color/text_secondary"
+                android:textSize="13sp"/>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="邮箱"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp"
+                android:layout_marginTop="12dp"/>
+
+            <EditText
+                android:id="@+id/et_email"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="you@example.com"
+                android:inputType="textEmailAddress"
+                android:textColor="@color/text_primary"
+                android:textColorHint="@color/text_secondary"
+                android:textSize="13sp"/>
+
+            <!-- 用户名（仅注册时显示）-->
+            <TextView
+                android:id="@+id/lbl_username"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="用户名"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp"
+                android:layout_marginTop="12dp"
+                android:visibility="gone"/>
+
+            <EditText
+                android:id="@+id/et_username"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="用户名"
+                android:inputType="text"
+                android:textColor="@color/text_primary"
+                android:textColorHint="@color/text_secondary"
+                android:textSize="13sp"
+                android:visibility="gone"/>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="主密码（最少 6 位 记牢了 忘了无法找回）"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp"
+                android:layout_marginTop="12dp"/>
+
+            <EditText
+                android:id="@+id/et_password"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="主密码"
+                android:inputType="textPassword"
+                android:textColor="@color/text_primary"
+                android:textColorHint="@color/text_secondary"
+                android:textSize="13sp"/>
+
+            <!-- 邀请码（仅注册时显示）-->
+            <TextView
+                android:id="@+id/lbl_invite"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="邀请码（首位管理员免填）"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp"
+                android:layout_marginTop="12dp"
+                android:visibility="gone"/>
+
+            <EditText
+                android:id="@+id/et_invite"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="8 位字符 如 ABCD1234"
+                android:inputType="textCapCharacters"
+                android:textColor="@color/text_primary"
+                android:textColorHint="@color/text_secondary"
+                android:textSize="13sp"
+                android:fontFamily="monospace"
+                android:visibility="gone"/>
+
+            <ProgressBar
+                android:id="@+id/pb_loading"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:visibility="gone"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:indeterminate="true"
+                android:indeterminateTint="@color/accent"/>
+
+            <TextView
+                android:id="@+id/tv_error"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="@color/red"
+                android:textSize="12sp"
+                android:layout_marginTop="8dp"/>
+
+            <Button
+                android:id="@+id/btn_submit"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="登录"
+                android:backgroundTint="@color/accent"
+                android:textColor="@color/bg"
+                android:layout_marginTop="12dp"/>
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="主密码派生的加密 key 只存本机内存\nNAS 服务凭据用你的主密码加密后 服务器只看到密文"
+            android:textColor="@color/text_secondary"
+            android:textSize="11sp"
+            android:gravity="center"
+            android:paddingTop="16dp"
+            android:lineSpacingExtra="2dp"/>
+    </LinearLayout>
+</ScrollView>

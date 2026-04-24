@@ -1,6 +1,7 @@
 package com.cp12064.moxianp2p
 
 import android.util.Base64
+import java.security.SecureRandom
 import javax.crypto.Cipher
 import javax.crypto.Mac
 import javax.crypto.SecretKeyFactory
@@ -130,4 +131,32 @@ object BwCrypto {
         val mac = hkdfExpand(masterKey, "mac", 32)
         return Pair(enc, mac)
     }
+
+    /** 加密成 EncString type 2 格式 "2.iv|ct|mac"
+     *  IV 16 字节随机 AES-256-CBC + HMAC-SHA256(iv || ct) */
+    fun encryptToEncString(plain: ByteArray, encKey: ByteArray, macKey: ByteArray): String {
+        // 随机 IV
+        val iv = ByteArray(16)
+        SecureRandom().nextBytes(iv)
+
+        // AES-CBC 加密
+        val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
+        cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(encKey, "AES"), IvParameterSpec(iv))
+        val ct = cipher.doFinal(plain)
+
+        // HMAC(iv || ct)
+        val mac = Mac.getInstance("HmacSHA256")
+        mac.init(SecretKeySpec(macKey, "HmacSHA256"))
+        mac.update(iv)
+        mac.update(ct)
+        val macBytes = mac.doFinal()
+
+        return "2." + Base64.encodeToString(iv, Base64.NO_WRAP) +
+                "|" + Base64.encodeToString(ct, Base64.NO_WRAP) +
+                "|" + Base64.encodeToString(macBytes, Base64.NO_WRAP)
+    }
+
+    /** String 重载 */
+    fun encryptToEncString(plain: String, encKey: ByteArray, macKey: ByteArray): String =
+        encryptToEncString(plain.toByteArray(Charsets.UTF_8), encKey, macKey)
 }
