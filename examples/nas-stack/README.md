@@ -64,18 +64,10 @@ cd moxian-p2p\examples\nas-stack
 
 无需手动改任何 CHANGEME 密码，脚本自动生成并打印到终端。
 
-**想加远程访问？** 最简路径是把 moxian-p2p 也跑成容器（Windows / Linux 都适用）：
+**想加远程访问？**
 
-```powershell
-# 编辑 NAS 端配置 填 server/udp/pass
-copy configs\moxian\client.yaml.example configs\moxian\client.yaml
-notepad configs\moxian\client.yaml
-
-# 加 overlay 一起启动（首次本地 build 约 1 分钟）
-docker compose -f docker-compose.yml -f docker-compose.moxian.yml up -d
-```
-
-详见 [`README-windows.md` 第五节](README-windows.md#五moxian-p2p-远程访问)。
+- **Windows**：下 `moxian-gui.exe` 原生跑（要管理员，TUN + vIP 透明体验）见 [`README-windows.md` 第五节](README-windows.md#五moxian-p2p-远程访问windows-用原生-exe)
+- **Linux 真机**：`docker compose -f docker-compose.yml -f docker-compose.moxian.yml up -d` 把 moxian 也纳入容器管理
 
 ### 访问
 

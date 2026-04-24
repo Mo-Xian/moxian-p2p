@@ -87,68 +87,96 @@ IP 查询：
 ipconfig | Select-String "IPv4"
 ```
 
-## 五、moxian-p2p 远程访问
+## 五、moxian-p2p 远程访问（Windows 用原生 exe）
 
-两种选法：**容器版 responder**（最简 跟其他应用一起管）或 **原生 exe TUN**（最透明 要管理员）。
+**Windows Docker Desktop 下不要跑 moxian 容器**（`docker-compose.moxian.yml` 这个 overlay 仅 Linux 真机用）。原因：WSL2 下 TUN 设备和 host 网络栈不稳定，容器版会各种奇怪问题。
 
-### 5.1 容器版 responder（Windows 也能跑）⭐
+**Windows 做法**：Docker 跑 6 个 NAS 应用，moxian 用原生 `moxian-gui.exe` 跑在托盘。两者并存互不影响。
 
-**原理**：moxian-client 容器不开 TUN，只做"对端来访问我 转发给 Docker 服务"。手机在 APP 里配 forward 规则指向 NAS 的 Docker 服务名。
-
-**一次性启动**：
+### 5.1 下载 + 配置
 
 ```powershell
-# 编辑 NAS 端配置
-copy configs\moxian\client.yaml.example configs\moxian\client.yaml
-notepad configs\moxian\client.yaml
-# 改三个字段：
+# 在 D:\nas-data\moxian\ 建个目录放 P2P 相关文件
+mkdir D:\nas-data\moxian
+cd D:\nas-data\moxian
+
+# 下载必要文件
+curl.exe -L -o moxian-gui.exe  https://github.com/Mo-Xian/moxian-p2p/releases/latest/download/moxian-gui.exe
+curl.exe -L -o wintun.dll      https://github.com/Mo-Xian/moxian-p2p/releases/latest/download/wintun.dll
+
+# 复制配置模板（从 nas-stack 目录）
+copy C:\path\to\moxian-p2p\examples\nas-stack\configs\moxian\client.yaml.example client.yaml
+
+# 改配置
+notepad client.yaml
+# 主要改三处：
 #   server: wss://你的VPS:8443/ws
 #   udp:    你的VPS:7000
-#   pass:   和手机端相同的强密码
+#   pass:   强密码（和手机端完全一致）
+```
 
-# 启动应用栈 + moxian 容器（首次本地 build Dockerfile 约 1 分钟）
+### 5.2 启动
+
+**右键 `moxian-gui.exe` → 以管理员身份运行**（TUN 驱动需要管理员权限）。
+
+托盘出现 moxian 图标 → 右键 → **启动**。
+
+日志 `[client] registered id=home-nas ...` + `[tun] device=... vip=10.88.0.X` 即表示就绪。
+
+### 5.3 手机端（Android APP）
+
+```
+node_id: phone
+server: wss://你的VPS:8443/ws
+udp:    你的VPS:7000
+pass:   （和 NAS 相同的强密码）
+virtual_ip: auto
+mesh: true
+```
+
+**不用填 forwards**（TUN 模式透明）。
+
+启动 VPN 后，手机浏览器/APP 直接用**虚拟 IP** 访问：
+
+- Jellyfin: `http://10.88.0.2:8096`
+- Immich: `http://10.88.0.2:2283`
+- Syncthing: `http://10.88.0.2:8384`
+- Vaultwarden: `http://10.88.0.2:8080`
+- qBittorrent: `http://10.88.0.2:8081`
+
+虚拟 IP 从 server 日志或 moxian-gui 托盘状态可见。
+
+### 5.4 开机自启（可选）
+
+想让 `moxian-gui.exe` 开机自动运行（管理员权限）：
+
+```powershell
+# 管理员 PowerShell
+$action = New-ScheduledTaskAction -Execute "D:\nas-data\moxian\moxian-gui.exe"
+$trigger = New-ScheduledTaskTrigger -AtLogon
+$principal = New-ScheduledTaskPrincipal -UserId "$env:USERNAME" -LogonType Interactive -RunLevel Highest
+Register-ScheduledTask -TaskName "moxian-p2p" -Action $action -Trigger $trigger -Principal $principal
+```
+
+登录 Windows 后自动启动（不用再右键管理员）。
+
+### 5.5 为什么不做成容器？
+
+| 原因 | 详情 |
+|------|------|
+| **WSL2 TUN 稳定性** | Docker Desktop 的 WSL2 VM 要跑 TUN 需要特殊内核配置 40%+ 概率失败 |
+| **host 网络 ≠ 真 host** | Docker Desktop 下 `network_mode: host` 是 WSL2 网络栈 不是 Windows 网卡 |
+| **性能损耗** | 即使勉强跑通 包要经过 WSL2 ↔ Windows 虚拟桥 延迟增加 |
+| **调试困难** | 一旦出问题 Windows/WSL2/Docker/moxian 几层嵌套 排查噩梦 |
+
+**迁移到 Linux 真机后**（M720q / N100 装 Debian）就能用 overlay 了：
+
+```bash
+# Linux 真机
 docker compose -f docker-compose.yml -f docker-compose.moxian.yml up -d
 ```
 
-**手机 APP 配置**（moxian-p2p Android APK）：
-
-主页"Forwards"字段一行一条：
-
-```
-127.0.0.1:18096=home-nas=jellyfin:8096
-127.0.0.1:12283=home-nas=immich-server:2283
-127.0.0.1:18384=home-nas=syncthing:8384
-```
-
-手机启动 VPN 后：
-- 看 Jellyfin：`http://127.0.0.1:18096`
-- 看 Immich：`http://127.0.0.1:12283`
-
-本质上手机本地端口 → moxian mesh → NAS 容器 → Docker 服务名解析 → 对应容器。**零 TUN 任何 Android 都能跑**。
-
-### 5.2 原生 moxian-gui.exe（需要管理员 但体验更透明）
-
-想在电脑上像接入 Tailscale 那样直接 ping 家里所有设备？用原生 TUN 版：
-
-1. 从 [Release 页](https://github.com/Mo-Xian/moxian-p2p/releases/latest) 下载 `moxian-gui.exe` + `wintun.dll`
-2. 放到同一文件夹 + 准备好 `client.yaml`（要开 `mesh: true` + `virtual_ip: auto`）
-3. **右键 `moxian-gui.exe` → 以管理员身份运行**
-4. 托盘图标右键菜单：启动 / 停止 / 编辑配置
-
-启动后本机有 TUN 虚拟网卡，直接 ping mesh 里其他节点（手机、其他 NAS）。
-
-### 5.3 两种方式对比
-
-| 维度 | 容器版 responder | 原生 exe TUN |
-|------|----------------|-------------|
-| 安装 | `docker compose` 一条 | 下载 exe + wintun.dll |
-| 需要管理员 | ❌ | ✅（TUN 驱动）|
-| 手机访问 NAS 服务 | ✅ 配 forward 规则 | ✅ 直接用虚拟 IP |
-| PC 访问家里路由器 Web / 其他局域网设备 | ❌ | ✅ |
-| Windows Docker Desktop | ✅ | N/A |
-| 管理方便 | ⭐ 和 Docker 应用一起 | 独立进程 |
-
-**多数家用场景推荐 5.1 容器版** —— 和 NAS 应用栈统一管理，迁移时只搬 `D:\nas-data`。
+容器直接挂 TUN 设备 + host 网络栈，同样的 vIP 透明体验，但全套容器化。
 
 ---
 
