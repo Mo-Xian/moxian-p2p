@@ -27,14 +27,25 @@
             android:textStyle="bold"/>
 
         <Button
+            android:id="@+id/btn_batch_login"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:minHeight="36dp"
+            android:minWidth="56dp"
+            android:paddingHorizontal="8dp"
+            android:text="批量登录"
+            android:textSize="11sp"
+            android:layout_marginEnd="6dp"/>
+
+        <Button
             android:id="@+id/btn_add"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:minHeight="36dp"
-            android:minWidth="64dp"
-            android:paddingHorizontal="12dp"
+            android:minWidth="56dp"
+            android:paddingHorizontal="10dp"
             android:text="+ 添加"
-            android:textSize="13sp"
+            android:textSize="12sp"
             android:backgroundTint="@color/accent"
             android:textColor="@color/bg"/>
     </LinearLayout>

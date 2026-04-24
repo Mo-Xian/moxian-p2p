@@ -67,7 +67,7 @@ class VaultwardenActivity : AppCompatActivity() {
 
         val svcId = intent.getStringExtra("svc_id") ?: run { finish(); return }
         svc = NasService.findById(this, svcId) ?: run { finish(); return }
-        prefs = getSharedPreferences("moxian", Context.MODE_PRIVATE)
+        prefs = AuthStore.prefs(this)
 
         supportActionBar?.apply { setDisplayHomeAsUpEnabled(true); title = svc.name }
 
@@ -113,6 +113,11 @@ class VaultwardenActivity : AppCompatActivity() {
         }
         layout.addView(etEmail); layout.addView(etPwd)
 
+        // 预填仅邮箱（主密码绝不持久）
+        if (etEmail.text.isEmpty()) {
+            AuthStore.loadLastCredentials(this)?.first?.let { etEmail.setText(it) }
+        }
+
         AlertDialog.Builder(this)
             .setTitle("Vaultwarden 解锁")
             .setView(layout)
@@ -121,6 +126,7 @@ class VaultwardenActivity : AppCompatActivity() {
                 val pwd = etPwd.text.toString()
                 if (email.isEmpty() || pwd.isEmpty()) { finish(); return@setPositiveButton }
                 prefs.edit().putString("vw_email_${svc.id}", email).apply()
+                // 不存主密码 但记录邮箱作为 last_user 方便别的服务预填
                 startLogin(email, pwd)
             }
             .setNegativeButton("取消") { _, _ -> finish() }

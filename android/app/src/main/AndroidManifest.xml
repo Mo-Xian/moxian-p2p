@@ -112,6 +112,12 @@
             android:parentActivityName=".ServiceLauncherActivity"
             android:label="Vaultwarden" />
 
+        <activity
+            android:name=".LoginWizardActivity"
+            android:exported="false"
+            android:parentActivityName=".ServiceLauncherActivity"
+            android:label="批量登录" />
+
         <service
             android:name=".NavPlayerService"
             android:exported="false"

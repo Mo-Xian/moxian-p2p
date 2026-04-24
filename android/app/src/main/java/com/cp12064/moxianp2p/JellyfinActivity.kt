@@ -52,7 +52,7 @@ class JellyfinActivity : AppCompatActivity() {
     private var currentParentId: String? = null  // null = 首屏媒体库列表
     private val deviceId by lazy {
         // 用稳定 device_id 以免每次登录产生新设备
-        val p = getSharedPreferences("moxian", Context.MODE_PRIVATE)
+        val p = AuthStore.prefs(this)
         p.getString("jf_device", null) ?: UUID.randomUUID().toString().also {
             p.edit().putString("jf_device", it).apply()
         }
@@ -66,7 +66,7 @@ class JellyfinActivity : AppCompatActivity() {
 
         val svcId = intent.getStringExtra("svc_id") ?: run { finish(); return }
         svc = NasService.findById(this, svcId) ?: run { finish(); return }
-        prefs = getSharedPreferences("moxian", Context.MODE_PRIVATE)
+        prefs = AuthStore.prefs(this)
 
         supportActionBar?.apply { setDisplayHomeAsUpEnabled(true); title = svc.name }
 
@@ -117,6 +117,7 @@ class JellyfinActivity : AppCompatActivity() {
         }
         val etUser = EditText(this).apply { hint = "用户名" }
         val etPwd = EditText(this).apply { hint = "密码" ; inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD }
+        AuthStore.loadLastCredentials(this)?.let { (u, p) -> etUser.setText(u); etPwd.setText(p) }
         layout.addView(etUser); layout.addView(etPwd)
 
         AlertDialog.Builder(this)
@@ -135,6 +136,7 @@ class JellyfinActivity : AppCompatActivity() {
                             .putString("jf_token_${svc.id}", accessToken)
                             .putString("jf_uid_${svc.id}", userId)
                             .apply()
+                        AuthStore.saveLastCredentials(this@JellyfinActivity, u, p)
                         loadLibraries()
                     }
                 }

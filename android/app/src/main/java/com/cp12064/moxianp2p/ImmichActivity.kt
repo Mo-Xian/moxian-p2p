@@ -57,7 +57,7 @@ class ImmichActivity : AppCompatActivity() {
 
         val svcId = intent.getStringExtra("svc_id") ?: run { finish(); return }
         svc = NasService.findById(this, svcId) ?: run { finish(); return }
-        prefs = getSharedPreferences("moxian", Context.MODE_PRIVATE)
+        prefs = AuthStore.prefs(this)
 
         supportActionBar?.apply { setDisplayHomeAsUpEnabled(true); title = svc.name }
 
@@ -92,22 +92,24 @@ class ImmichActivity : AppCompatActivity() {
         }
         val etEmail = EditText(this).apply { hint = "邮箱" ; inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS }
         val etPwd = EditText(this).apply { hint = "密码" ; inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD }
+        AuthStore.loadLastCredentials(this)?.let { (u, p) -> etEmail.setText(u); etPwd.setText(p) }
         layout.addView(etEmail); layout.addView(etPwd)
 
         AlertDialog.Builder(this)
             .setTitle("Immich 登录")
             .setView(layout)
             .setPositiveButton("登录") { _, _ ->
+                val email = etEmail.text.toString().trim()
+                val pwd = etPwd.text.toString()
                 lifecycleScope.launch {
                     tvStatus.text = "登录中..."
-                    val token = withContext(Dispatchers.IO) {
-                        login(etEmail.text.toString().trim(), etPwd.text.toString())
-                    }
+                    val token = withContext(Dispatchers.IO) { login(email, pwd) }
                     if (token.isNullOrBlank()) {
                         tvStatus.text = "登录失败"
                     } else {
                         accessToken = token
                         prefs.edit().putString("immich_token_${svc.id}", token).apply()
+                        AuthStore.saveLastCredentials(this@ImmichActivity, email, pwd)
                         loadPhotos()
                     }
                 }

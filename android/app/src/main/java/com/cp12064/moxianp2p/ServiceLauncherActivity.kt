@@ -53,6 +53,9 @@ class ServiceLauncherActivity : AppCompatActivity() {
 
         btnAdd.setOnClickListener { showEditDialog(null) }
         btnImportTemplates.setOnClickListener { showImportTemplatesDialog() }
+        findViewById<android.widget.Button>(R.id.btn_batch_login).setOnClickListener {
+            startActivity(android.content.Intent(this, LoginWizardActivity::class.java))
+        }
 
         supportActionBar?.apply {
             setDisplayHomeAsUpEnabled(true)

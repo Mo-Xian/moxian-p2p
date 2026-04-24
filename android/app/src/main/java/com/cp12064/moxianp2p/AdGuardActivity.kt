@@ -56,7 +56,7 @@ class AdGuardActivity : AppCompatActivity() {
 
         val svcId = intent.getStringExtra("svc_id") ?: run { finish(); return }
         svc = NasService.findById(this, svcId) ?: run { finish(); return }
-        prefs = getSharedPreferences("moxian", Context.MODE_PRIVATE)
+        prefs = AuthStore.prefs(this)
 
         supportActionBar?.apply {
             setDisplayHomeAsUpEnabled(true)
@@ -100,6 +100,7 @@ class AdGuardActivity : AppCompatActivity() {
             hint = "密码"
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
         }
+        AuthStore.loadLastCredentials(this)?.let { (u, p) -> etUser.setText(u); etPwd.setText(p) }
         layout.addView(etUser); layout.addView(etPwd)
         AlertDialog.Builder(this)
             .setTitle("AdGuard Home 登录")
@@ -109,6 +110,7 @@ class AdGuardActivity : AppCompatActivity() {
                 val p = etPwd.text.toString()
                 if (u.isEmpty()) { finish(); return@setPositiveButton }
                 prefs.edit().putString("ag_user_${svc.id}", u).putString("ag_pass_${svc.id}", p).apply()
+                AuthStore.saveLastCredentials(this, u, p)
                 authHeader = basicAuth(u, p)
                 startPolling()
             }

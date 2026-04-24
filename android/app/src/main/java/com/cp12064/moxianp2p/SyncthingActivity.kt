@@ -54,7 +54,7 @@ class SyncthingActivity : AppCompatActivity() {
 
         val svcId = intent.getStringExtra("svc_id") ?: run { finish(); return }
         svc = NasService.findById(this, svcId) ?: run { finish(); return }
-        prefs = getSharedPreferences("moxian", Context.MODE_PRIVATE)
+        prefs = AuthStore.prefs(this)
 
         supportActionBar?.apply {
             setDisplayHomeAsUpEnabled(true)

@@ -74,7 +74,7 @@ class NavidromeActivity : AppCompatActivity() {
 
         val svcId = intent.getStringExtra("svc_id") ?: run { finish(); return }
         svc = NasService.findById(this, svcId) ?: run { finish(); return }
-        prefs = getSharedPreferences("moxian", android.content.Context.MODE_PRIVATE)
+        prefs = AuthStore.prefs(this)
 
         supportActionBar?.apply { setDisplayHomeAsUpEnabled(true); title = svc.name }
 
@@ -137,6 +137,7 @@ class NavidromeActivity : AppCompatActivity() {
         val layout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(48, 24, 48, 24) }
         val etU = EditText(this).apply { hint = "用户名" }
         val etP = EditText(this).apply { hint = "密码" ; inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD }
+        AuthStore.loadLastCredentials(this)?.let { (u, p) -> etU.setText(u); etP.setText(p) }
         layout.addView(etU); layout.addView(etP)
         AlertDialog.Builder(this)
             .setTitle("Navidrome 登录")
@@ -148,6 +149,7 @@ class NavidromeActivity : AppCompatActivity() {
                     .putString("nav_user_${svc.id}", username)
                     .putString("nav_pass_${svc.id}", password)
                     .apply()
+                AuthStore.saveLastCredentials(this, username, password)
                 loadAlbums()
             }
             .setNegativeButton("取消") { _, _ -> finish() }

@@ -62,7 +62,7 @@ class QBittorrentActivity : AppCompatActivity() {
 
         val svcId = intent.getStringExtra("svc_id") ?: run { finish(); return }
         svc = NasService.findById(this, svcId) ?: run { finish(); return }
-        prefs = getSharedPreferences("moxian", Context.MODE_PRIVATE)
+        prefs = AuthStore.prefs(this)
 
         supportActionBar?.apply {
             setDisplayHomeAsUpEnabled(true)
@@ -120,6 +120,8 @@ class QBittorrentActivity : AppCompatActivity() {
             }
             return
         }
+        // 登录成功 记录到 LastCredentials 供下个服务预填
+        AuthStore.saveLastCredentials(this, user, pwd ?: "")
 
         // 每 3 秒刷新一次
         pollJob?.cancel()
@@ -144,6 +146,10 @@ class QBittorrentActivity : AppCompatActivity() {
         val etPwd = EditText(this).apply {
             hint = "密码"
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+        // 预填上次成功登录的凭据（NAS 各服务常用同一套账号）
+        AuthStore.loadLastCredentials(this)?.let { (u, p) ->
+            etUser.setText(u); etPwd.setText(p)
         }
         layout.addView(etUser)
         layout.addView(etPwd)
