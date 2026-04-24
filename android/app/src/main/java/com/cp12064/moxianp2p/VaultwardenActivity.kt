@@ -277,7 +277,7 @@ class VaultwardenActivity : AppCompatActivity() {
     }
 
     // ---- 点击展示详情 ----
-    private fun onItemClick(it: VwItem) {
+    private fun onItemClick(item: VwItem) {
         val layout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; setPadding(48, 24, 48, 24)
         }
@@ -309,10 +309,10 @@ class VaultwardenActivity : AppCompatActivity() {
                 })
             }
         }
-        addRow("名称", it.name, false)
-        if (it.uri.isNotEmpty()) addRow("URL", it.uri, true)
-        if (it.username.isNotEmpty()) addRow("用户名", it.username, true)
-        if (it.password.isNotEmpty()) addRow("密码", it.password, true)
+        addRow("名称", item.name, false)
+        if (item.uri.isNotEmpty()) addRow("URL", item.uri, true)
+        if (item.username.isNotEmpty()) addRow("用户名", item.username, true)
+        if (item.password.isNotEmpty()) addRow("密码", item.password, true)
 
         AlertDialog.Builder(this)
             .setView(layout)
@@ -330,10 +330,10 @@ private class CipherAdapter(val onClick: (VwItem) -> Unit) : RecyclerView.Adapte
         LayoutInflater.from(parent.context).inflate(R.layout.item_cipher, parent, false)
     )
     override fun onBindViewHolder(h: VH, position: Int) {
-        val it = items[position]
-        h.tvName.text = it.name.ifEmpty { "(无名)" }
-        h.tvUser.text = if (it.username.isNotEmpty()) it.username else it.uri
-        h.itemView.setOnClickListener { onClick(it) }
+        val item = items[position]
+        h.tvName.text = item.name.ifEmpty { "(无名)" }
+        h.tvUser.text = if (item.username.isNotEmpty()) item.username else item.uri
+        h.itemView.setOnClickListener { onClick(item) }
     }
     override fun getItemCount() = items.size
     class VH(v: View) : RecyclerView.ViewHolder(v) {

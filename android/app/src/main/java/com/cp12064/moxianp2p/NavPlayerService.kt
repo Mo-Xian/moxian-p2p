@@ -23,6 +23,9 @@ import java.net.URL
  * 最简版：MediaPlayer 流式播放 + 前台通知（保活）
  * 不包含 MediaSession / 锁屏控制 / 蓝牙媒体键（下一版再补）
  */
+data class NavTrack(val title: String, val artist: String, val coverUrl: String, val streamUrl: String)
+data class NavPlayState(val title: String, val artist: String, val playing: Boolean)
+
 class NavPlayerService : Service() {
 
     companion object {
@@ -32,13 +35,10 @@ class NavPlayerService : Service() {
         const val ACTION_TOGGLE = "toggle"
         const val ACTION_STOP = "stop"
 
-        data class Track(val title: String, val artist: String, val coverUrl: String, val streamUrl: String)
-        data class State(val title: String, val artist: String, val playing: Boolean)
-
-        @Volatile var currentState: State? = null
+        @Volatile var currentState: NavPlayState? = null
             private set
 
-        fun play(ctx: Context, t: Track) {
+        fun play(ctx: Context, t: NavTrack) {
             val i = Intent(ctx, NavPlayerService::class.java).apply {
                 action = ACTION_PLAY
                 putExtra("title", t.title)
@@ -125,7 +125,7 @@ class NavPlayerService : Service() {
     }
 
     private fun updateState(playing: Boolean) {
-        currentState = State(currentTitle, currentArtist, playing)
+        currentState = NavPlayState(currentTitle, currentArtist, playing)
     }
 
     private fun createChannel() {

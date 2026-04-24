@@ -281,10 +281,10 @@ private class JfAdapter(
         return VH(v)
     }
     override fun onBindViewHolder(h: VH, position: Int) {
-        val it = items[position]
-        h.tvName.text = it.name
-        h.tvYear.text = if (it.year > 0) it.year.toString() else it.type
-        val poster = "${baseUrl()}/Items/${it.id}/Images/Primary?maxWidth=300${if (it.imageTag.isNotEmpty()) "&tag=${it.imageTag}" else ""}"
+        val item = items[position]
+        h.tvName.text = item.name
+        h.tvYear.text = if (item.year > 0) item.year.toString() else item.type
+        val poster = "${baseUrl()}/Items/${item.id}/Images/Primary?maxWidth=300${if (item.imageTag.isNotEmpty()) "&tag=${item.imageTag}" else ""}"
         h.iv.load(
             ImageRequest.Builder(h.iv.context)
                 .data(poster)
@@ -292,7 +292,7 @@ private class JfAdapter(
                 .crossfade(true)
                 .build()
         )
-        h.itemView.setOnClickListener { onClick(it) }
+        h.itemView.setOnClickListener { onClick(item) }
     }
     override fun getItemCount() = items.size
 

@@ -181,22 +181,24 @@ class NavidromeActivity : AppCompatActivity() {
         }
     }
 
-    private fun fetchAlbums(): List<NavRow> = try {
-        val url = "${svc.url}/rest/getAlbumList2.view?${buildAuthQuery()}&type=newest&size=100"
-        val json = URL(url).readText()
-        val response = JSONObject(json).optJSONObject("subsonic-response") ?: return emptyList()
-        val albums = response.optJSONObject("albumList2")?.optJSONArray("album") ?: return emptyList()
-        (0 until albums.length()).map {
-            val o = albums.getJSONObject(it)
-            NavRow(
-                id = o.optString("id"),
-                title = o.optString("name"),
-                sub = "${o.optString("artist")} · ${o.optInt("year", 0).let { y -> if (y > 0) y.toString() else "" }}",
-                coverArt = o.optString("coverArt"),
-                isAlbum = true,
-            )
-        }
-    } catch (e: Exception) { emptyList() }
+    private fun fetchAlbums(): List<NavRow> {
+        return try {
+            val url = "${svc.url}/rest/getAlbumList2.view?${buildAuthQuery()}&type=newest&size=100"
+            val json = URL(url).readText()
+            val response = JSONObject(json).optJSONObject("subsonic-response") ?: return emptyList()
+            val albums = response.optJSONObject("albumList2")?.optJSONArray("album") ?: return emptyList()
+            (0 until albums.length()).map {
+                val o = albums.getJSONObject(it)
+                NavRow(
+                    id = o.optString("id"),
+                    title = o.optString("name"),
+                    sub = "${o.optString("artist")} · ${o.optInt("year", 0).let { y -> if (y > 0) y.toString() else "" }}",
+                    coverArt = o.optString("coverArt"),
+                    isAlbum = true,
+                )
+            }
+        } catch (e: Exception) { emptyList() }
+    }
 
     private fun loadSongs(albumId: String, albumName: String) {
         level = Level.SONGS
@@ -216,8 +218,8 @@ class NavidromeActivity : AppCompatActivity() {
     private fun fetchAlbumSongs(albumId: String): List<NavRow> = try {
         val url = "${svc.url}/rest/getAlbum.view?${buildAuthQuery()}&id=$albumId"
         val json = URL(url).readText()
-        val r = JSONObject(json).optJSONObject("subsonic-response") ?: return emptyList()
-        val songs = r.optJSONObject("album")?.optJSONArray("song") ?: return emptyList()
+        val r = JSONObject(json).optJSONObject("subsonic-response") ?: JSONObject()
+        val songs = r.optJSONObject("album")?.optJSONArray("song") ?: JSONArray()
         (0 until songs.length()).map {
             val o = songs.getJSONObject(it)
             NavRow(
@@ -255,7 +257,7 @@ class NavidromeActivity : AppCompatActivity() {
         else ""
         NavPlayerService.play(
             this,
-            NavPlayerService.Track(song.title, song.artist, coverUrl, streamUrl),
+            NavTrack(song.title, song.artist, coverUrl, streamUrl),
         )
     }
 }

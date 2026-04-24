@@ -144,35 +144,33 @@ class ImmichActivity : AppCompatActivity() {
         }
     }
 
-    // 通过 /api/timeline/buckets 拿到时间桶 再逐个拉 /api/timeline/bucket
-    // 简化版：直接拉一个大的 search 结果
-    private fun fetchAllAssetIds(): List<String> = try {
-        // 用 search API 拉最近的（倒序）最多 500 张
-        val conn = URL("${svc.url}/api/search/metadata").openConnection() as HttpURLConnection
-        conn.requestMethod = "POST"
-        conn.connectTimeout = 5000
-        conn.readTimeout = 30_000
-        conn.setRequestProperty("Authorization", "Bearer $accessToken")
-        conn.setRequestProperty("Content-Type", "application/json")
-        conn.doOutput = true
-        val body = """{"order":"desc","size":500}"""
-        conn.outputStream.use { it.write(body.toByteArray()) }
-        if (conn.responseCode == 200) {
+    // 通过 /api/search/metadata 拉最近 500 张 IMAGE 的 ID
+    private fun fetchAllAssetIds(): List<String> {
+        return try {
+            val conn = URL("${svc.url}/api/search/metadata").openConnection() as HttpURLConnection
+            conn.requestMethod = "POST"
+            conn.connectTimeout = 5000
+            conn.readTimeout = 30_000
+            conn.setRequestProperty("Authorization", "Bearer $accessToken")
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.doOutput = true
+            val body = """{"order":"desc","size":500}"""
+            conn.outputStream.use { it.write(body.toByteArray()) }
+            if (conn.responseCode != 200) return emptyList()
             val json = conn.inputStream.bufferedReader().use { it.readText() }
             val r = JSONObject(json)
-            // 可能的结构：{ "assets": { "items": [...] } } 或直接 [...]
+            // 结构兼容：{assets:{items:[...]}} 或 {items:[...]}
             val items = r.optJSONObject("assets")?.optJSONArray("items")
                 ?: r.optJSONArray("items")
                 ?: return emptyList()
             (0 until items.length()).mapNotNull {
                 val o = items.optJSONObject(it) ?: return@mapNotNull null
-                // 只要 IMAGE 类型
                 if (o.optString("type").equals("IMAGE", true)) o.optString("id") else null
             }
-        } else emptyList()
-    } catch (e: Exception) {
-        runOnUiThread { tvStatus.text = "加载失败: ${e.message}" }
-        emptyList()
+        } catch (e: Exception) {
+            runOnUiThread { tvStatus.text = "加载失败: ${e.message}" }
+            emptyList()
+        }
     }
 
     private fun openViewer(startPos: Int) {
