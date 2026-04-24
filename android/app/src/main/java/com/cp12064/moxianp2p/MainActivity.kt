@@ -80,6 +80,13 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    companion object {
+        // 后台超过此时间自动锁定（清 masterKey 要求重输主密码）
+        private const val AUTO_LOCK_MS = 10 * 60 * 1000L
+
+        @Volatile var lastPauseAt: Long = 0
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -90,6 +97,10 @@ class MainActivity : AppCompatActivity() {
                 finish()
                 return
             }
+        }
+        // 后台超时自动锁
+        if (lastPauseAt > 0 && System.currentTimeMillis() - lastPauseAt > AUTO_LOCK_MS) {
+            AuthSession.lock()
         }
         if (!AuthSession.isUnlocked()) {
             startActivity(Intent(this, UnlockActivity::class.java))
@@ -608,6 +619,23 @@ class MainActivity : AppCompatActivity() {
                         try { startActivity(Intent(Intent.ACTION_VIEW, uri)) } catch (_: Exception) {}
                     }
                 }
+            }
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        lastPauseAt = System.currentTimeMillis()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // 恢复时若超时则锁定并跳解锁页
+        if (lastPauseAt > 0 && System.currentTimeMillis() - lastPauseAt > AUTO_LOCK_MS) {
+            AuthSession.lock()
+            if (AuthSession.isLoggedIn() && !AuthSession.isUnlocked()) {
+                startActivity(Intent(this, UnlockActivity::class.java))
+                finish()
             }
         }
     }

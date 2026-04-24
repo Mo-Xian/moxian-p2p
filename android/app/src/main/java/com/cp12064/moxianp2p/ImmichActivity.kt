@@ -58,6 +58,7 @@ class ImmichActivity : AppCompatActivity() {
         val svcId = intent.getStringExtra("svc_id") ?: run { finish(); return }
         svc = NasService.findById(this, svcId) ?: run { finish(); return }
         prefs = AuthStore.prefs(this)
+        VaultSync.pullTokenToPrefs(svc.id, prefs, "immich_token_${svc.id}")
 
         supportActionBar?.apply { setDisplayHomeAsUpEnabled(true); title = svc.name }
 
@@ -110,6 +111,7 @@ class ImmichActivity : AppCompatActivity() {
                         accessToken = token
                         prefs.edit().putString("immich_token_${svc.id}", token).apply()
                         AuthStore.saveLastCredentials(this@ImmichActivity, email, pwd)
+                        VaultSync.pushFromPrefs(this@ImmichActivity, this@ImmichActivity, svc.id, email, token, pwd)
                         loadPhotos()
                     }
                 }

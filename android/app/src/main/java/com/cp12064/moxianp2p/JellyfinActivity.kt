@@ -67,6 +67,13 @@ class JellyfinActivity : AppCompatActivity() {
         val svcId = intent.getStringExtra("svc_id") ?: run { finish(); return }
         svc = NasService.findById(this, svcId) ?: run { finish(); return }
         prefs = AuthStore.prefs(this)
+        // v2: Vault 里 password 字段存 token extra 存 userId
+        AuthSession.getVault()?.get(svc.id)?.let { e ->
+            if (e.password.isNotEmpty()) prefs.edit()
+                .putString("jf_token_${svc.id}", e.password)
+                .putString("jf_uid_${svc.id}", e.extra)
+                .apply()
+        }
 
         supportActionBar?.apply { setDisplayHomeAsUpEnabled(true); title = svc.name }
 
@@ -137,6 +144,8 @@ class JellyfinActivity : AppCompatActivity() {
                             .putString("jf_uid_${svc.id}", userId)
                             .apply()
                         AuthStore.saveLastCredentials(this@JellyfinActivity, u, p)
+                        VaultSync.pushFromPrefs(this@JellyfinActivity, this@JellyfinActivity,
+                            svc.id, u, accessToken, userId)
                         loadLibraries()
                     }
                 }

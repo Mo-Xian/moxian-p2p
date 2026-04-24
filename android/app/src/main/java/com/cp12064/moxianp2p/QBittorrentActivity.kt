@@ -63,6 +63,8 @@ class QBittorrentActivity : AppCompatActivity() {
         val svcId = intent.getStringExtra("svc_id") ?: run { finish(); return }
         svc = NasService.findById(this, svcId) ?: run { finish(); return }
         prefs = AuthStore.prefs(this)
+        // v2: Vault 优先 若已有凭据覆盖本地 prefs
+        VaultSync.pullToPrefs(svc.id, prefs, "qbit_user_${svc.id}", "qbit_pass_${svc.id}")
 
         supportActionBar?.apply {
             setDisplayHomeAsUpEnabled(true)
@@ -122,6 +124,8 @@ class QBittorrentActivity : AppCompatActivity() {
         }
         // 登录成功 记录到 LastCredentials 供下个服务预填
         AuthStore.saveLastCredentials(this, user, pwd ?: "")
+        // v2: 同步到 Vault 加密上传服务器
+        VaultSync.pushFromPrefs(this, this, svc.id, user, pwd ?: "")
 
         // 每 3 秒刷新一次
         pollJob?.cancel()

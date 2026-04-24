@@ -68,6 +68,10 @@ class VaultwardenActivity : AppCompatActivity() {
         val svcId = intent.getStringExtra("svc_id") ?: run { finish(); return }
         svc = NasService.findById(this, svcId) ?: run { finish(); return }
         prefs = AuthStore.prefs(this)
+        // v2: 从 Vault 拿 email 预填（主密码不持久 避免存 Vault 中的 Vault）
+        AuthSession.getVault()?.get(svc.id)?.username?.let {
+            if (it.isNotEmpty()) prefs.edit().putString("vw_email_${svc.id}", it).apply()
+        }
 
         supportActionBar?.apply { setDisplayHomeAsUpEnabled(true); title = svc.name }
 
@@ -127,6 +131,8 @@ class VaultwardenActivity : AppCompatActivity() {
                 if (email.isEmpty() || pwd.isEmpty()) { finish(); return@setPositiveButton }
                 prefs.edit().putString("vw_email_${svc.id}", email).apply()
                 // 不存主密码 但记录邮箱作为 last_user 方便别的服务预填
+                // v2: 同步 email 到 Vault（password 字段留空 主密码绝不落地）
+                VaultSync.pushFromPrefs(this, this, svc.id, email, "")
                 startLogin(email, pwd)
             }
             .setNegativeButton("取消") { _, _ -> finish() }

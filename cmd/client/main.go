@@ -49,10 +49,57 @@ func main() {
 		allowPeers = flag.String("allow-peers", "", "ACL：允许互连的 peer 列表 逗号分隔 可为 node_id 或 tag=val；空=无限制")
 		rateLimit  = flag.String("rate-limit", "", "客户端总出站限速 例 10MB / 1.5MB（空=不限）")
 		configFile = flag.String("config", "", "YAML 配置文件路径（CLI flag 优先）")
+		// v2 登录模式
+		loginSrv   = flag.String("login", "", "v2 模式：moxian-server HTTPS 地址 例 https://vps.example.com:7788")
+		loginEmail = flag.String("email", "", "v2 模式：登录邮箱")
+		loginPwd   = flag.String("password", "", "v2 模式：主密码（强烈建议用环境变量 MOXIAN_PASSWORD）")
 		forwards   forwardFlag
 	)
 	flag.Var(&forwards, "forward", "主动侧端口映射 LOCAL=PEER=TARGET 可多次")
 	flag.Parse()
+
+	// v2 模式：用 -login + -email + -password 登录自动拉配置
+	if *loginSrv != "" {
+		pwd := *loginPwd
+		if pwd == "" {
+			pwd = os.Getenv("MOXIAN_PASSWORD")
+		}
+		if *loginEmail == "" || pwd == "" {
+			log.Fatal("v2 模式需要 -email 和 -password（或 MOXIAN_PASSWORD 环境变量）")
+		}
+		ac := client.NewAuthClient(*loginSrv)
+		if _, err := ac.Login(*loginEmail, pwd); err != nil {
+			log.Fatalf("v2 登录失败: %v", err)
+		}
+		nodeForCfg := *nodeID
+		if nodeForCfg == "" {
+			nodeForCfg = "cli-" + hostnameOrRandom()
+		}
+		cfg2, err := ac.FetchConfig(nodeForCfg)
+		if err != nil {
+			log.Fatalf("v2 拉配置失败: %v", err)
+		}
+		// 填入 CLI flag（尊重用户已显式指定的值）
+		if *nodeID == "" {
+			*nodeID = cfg2.NodeID
+		}
+		if *server == "" {
+			*server = cfg2.ServerWS
+		}
+		if *udpAddr == "" {
+			*udpAddr = cfg2.ServerUDP
+		}
+		if *pass == "" {
+			*pass = cfg2.Pass
+		}
+		if *virtualIP == "" {
+			*virtualIP = cfg2.VirtualIP
+		}
+		if !*mesh {
+			*mesh = cfg2.Mesh
+		}
+		log.Printf("[v2] 已从 server 获取配置 node=%s vip=%s peers=%v", cfg2.NodeID, cfg2.VirtualIP, cfg2.AllowPeers)
+	}
 
 	debug.Enable(*verbose)
 
@@ -126,6 +173,14 @@ func main() {
 	if err := c.Run(ctx); err != nil && ctx.Err() == nil {
 		log.Fatal(err)
 	}
+}
+
+func hostnameOrRandom() string {
+	h, err := os.Hostname()
+	if err == nil && h != "" {
+		return strings.ReplaceAll(h, ".", "-")
+	}
+	return fmt.Sprintf("cli-%d", os.Getpid())
 }
 
 // parseSizeCLI 与 client.parseSize 同逻辑 由于在 main 包使用 单独实现

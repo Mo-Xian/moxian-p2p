@@ -75,6 +75,7 @@ class NavidromeActivity : AppCompatActivity() {
         val svcId = intent.getStringExtra("svc_id") ?: run { finish(); return }
         svc = NasService.findById(this, svcId) ?: run { finish(); return }
         prefs = AuthStore.prefs(this)
+        VaultSync.pullToPrefs(svc.id, prefs, "nav_user_${svc.id}", "nav_pass_${svc.id}")
 
         supportActionBar?.apply { setDisplayHomeAsUpEnabled(true); title = svc.name }
 
@@ -150,6 +151,7 @@ class NavidromeActivity : AppCompatActivity() {
                     .putString("nav_pass_${svc.id}", password)
                     .apply()
                 AuthStore.saveLastCredentials(this, username, password)
+                VaultSync.pushFromPrefs(this, this, svc.id, username, password)
                 loadAlbums()
             }
             .setNegativeButton("取消") { _, _ -> finish() }

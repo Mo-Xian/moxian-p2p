@@ -57,6 +57,7 @@ class AdGuardActivity : AppCompatActivity() {
         val svcId = intent.getStringExtra("svc_id") ?: run { finish(); return }
         svc = NasService.findById(this, svcId) ?: run { finish(); return }
         prefs = AuthStore.prefs(this)
+        VaultSync.pullToPrefs(svc.id, prefs, "ag_user_${svc.id}", "ag_pass_${svc.id}")
 
         supportActionBar?.apply {
             setDisplayHomeAsUpEnabled(true)
@@ -111,6 +112,7 @@ class AdGuardActivity : AppCompatActivity() {
                 if (u.isEmpty()) { finish(); return@setPositiveButton }
                 prefs.edit().putString("ag_user_${svc.id}", u).putString("ag_pass_${svc.id}", p).apply()
                 AuthStore.saveLastCredentials(this, u, p)
+                VaultSync.pushFromPrefs(this, this, svc.id, u, p)
                 authHeader = basicAuth(u, p)
                 startPolling()
             }

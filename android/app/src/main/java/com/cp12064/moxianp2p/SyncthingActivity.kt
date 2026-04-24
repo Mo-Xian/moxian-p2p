@@ -55,6 +55,8 @@ class SyncthingActivity : AppCompatActivity() {
         val svcId = intent.getStringExtra("svc_id") ?: run { finish(); return }
         svc = NasService.findById(this, svcId) ?: run { finish(); return }
         prefs = AuthStore.prefs(this)
+        // v2: Vault 优先（把 api key 当 token 存到 vault 的 password 字段）
+        VaultSync.pullTokenToPrefs(svc.id, prefs, "sync_apikey_${svc.id}")
 
         supportActionBar?.apply {
             setDisplayHomeAsUpEnabled(true)
@@ -97,6 +99,8 @@ class SyncthingActivity : AppCompatActivity() {
                 if (k.isEmpty()) { finish(); return@setPositiveButton }
                 apiKey = k
                 prefs.edit().putString("sync_apikey_${svc.id}", k).apply()
+                // v2: 同步 API key 到 Vault
+                VaultSync.pushFromPrefs(this@SyncthingActivity, this@SyncthingActivity, svc.id, "", k)
                 startPolling()
             }
             .setNegativeButton("取消") { _, _ -> finish() }
