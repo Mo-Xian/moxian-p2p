@@ -3,16 +3,42 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@color/bg"
-    android:padding="12dp">
+    android:background="@color/bg">
 
-    <!-- 升级横幅（默认隐藏 检测到新版本时显示）-->
+    <!-- 顶部标题栏 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:padding="12dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:text="moxian-p2p"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="@color/accent"/>
+
+        <ImageButton
+            android:id="@+id/btn_menu"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:src="@android:drawable/ic_menu_more"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="菜单"/>
+    </LinearLayout>
+
+    <!-- 升级横幅（默认隐藏）-->
     <TextView
         android:id="@+id/tv_update"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:visibility="gone"
         android:padding="10dp"
+        android:layout_marginHorizontal="12dp"
         android:layout_marginBottom="6dp"
         android:textColor="@color/bg"
         android:textSize="13sp"
@@ -22,68 +48,87 @@
         android:clickable="true"
         android:focusable="true"/>
 
-    <!-- 状态条 -->
+    <!-- 紧凑状态条 -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical"
         android:background="@color/bg_card"
-        android:padding="10dp">
+        android:padding="14dp"
+        android:layout_marginHorizontal="12dp">
 
         <TextView
             android:id="@+id/tv_state_dot"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="●"
-            android:textSize="18sp"
+            android:textSize="20sp"
             android:textColor="@color/text_secondary"
-            android:layout_marginEnd="6dp"/>
+            android:layout_marginEnd="10dp"/>
 
         <ProgressBar
             android:id="@+id/pb_connecting"
             android:layout_width="18dp"
             android:layout_height="18dp"
-            android:layout_marginEnd="6dp"
+            android:layout_marginEnd="8dp"
             android:visibility="gone"
             android:indeterminateTint="@color/accent"
             style="?android:attr/progressBarStyleSmall"/>
 
-        <TextView
-            android:id="@+id/tv_status"
+        <LinearLayout
             android:layout_width="0dp"
             android:layout_weight="1"
             android:layout_height="wrap_content"
-            android:text="@string/status_idle"
-            android:textSize="16sp"
-            android:textColor="@color/accent"/>
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/tv_status"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/status_idle"
+                android:textSize="14sp"
+                android:textColor="@color/accent"
+                android:textStyle="bold"/>
+
+            <TextView
+                android:id="@+id/tv_node_info"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="11sp"
+                android:textColor="@color/text_secondary"
+                android:fontFamily="monospace"/>
+        </LinearLayout>
 
         <Button
             android:id="@+id/btn_test"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:minHeight="40dp"
-            android:minWidth="64dp"
+            android:minHeight="36dp"
+            android:minWidth="52dp"
             android:paddingHorizontal="10dp"
             android:text="@string/btn_test"
-            android:textSize="13sp"
+            android:textSize="11sp"
             android:visibility="gone"
-            android:layout_marginEnd="8dp"/>
+            android:layout_marginEnd="6dp"/>
 
         <Button
             android:id="@+id/btn_start_stop"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:minHeight="40dp"
+            android:paddingHorizontal="14dp"
             android:text="@string/btn_start"
             android:backgroundTint="@color/accent"
             android:textColor="@color/bg"/>
     </LinearLayout>
 
-    <!-- 配置区（可折叠） -->
+    <!-- NAS 服务网格 + 日志 可切换 -->
     <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
+        android:layout_marginHorizontal="12dp"
         android:layout_marginTop="8dp">
 
         <LinearLayout
@@ -91,227 +136,151 @@
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
-            <!-- 配置卡片 -->
+            <!-- 服务区 -->
             <LinearLayout
-                android:id="@+id/config_card"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:background="@color/bg_card"
-                android:padding="12dp">
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingVertical="8dp">
 
-                <LinearLayout
-                    android:layout_width="match_parent"
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
                     android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center_vertical"
-                    android:paddingBottom="8dp">
+                    android:text="NAS 服务"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/accent"/>
 
-                    <TextView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="配置"
-                        android:textColor="@color/accent"
-                        android:textStyle="bold"/>
-
-                    <Button
-                        android:id="@+id/btn_services"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:minHeight="32dp"
-                        android:minWidth="64dp"
-                        android:paddingHorizontal="8dp"
-                        android:text="服务"
-                        android:textSize="12sp"
-                        android:backgroundTint="@color/accent"
-                        android:textColor="@color/bg"
-                        android:layout_marginEnd="6dp"/>
-
-                    <Button
-                        android:id="@+id/btn_qr_scan"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:minHeight="32dp"
-                        android:minWidth="64dp"
-                        android:paddingHorizontal="8dp"
-                        android:text="扫码"
-                        android:textSize="12sp"
-                        android:layout_marginEnd="6dp"/>
-
-                    <Button
-                        android:id="@+id/btn_qr_show"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:minHeight="32dp"
-                        android:minWidth="64dp"
-                        android:paddingHorizontal="8dp"
-                        android:text="分享"
-                        android:textSize="12sp"/>
-                </LinearLayout>
-
-                <!-- ⭐ 必填 3 项（简单模式唯一可见的字段）-->
-                <EditText
-                    android:id="@+id/et_server"
-                    android:layout_width="match_parent"
+                <Button
+                    android:id="@+id/btn_manage_services"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:hint="@string/hint_server"
-                    android:inputType="textUri"
-                    android:textColor="@color/text_primary"
-                    android:textColorHint="@color/text_secondary"/>
-
-                <EditText
-                    android:id="@+id/et_udp"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:hint="@string/hint_udp"
-                    android:inputType="text"
-                    android:textColor="@color/text_primary"
-                    android:textColorHint="@color/text_secondary"/>
-
-                <EditText
-                    android:id="@+id/et_pass"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:hint="@string/hint_pass"
-                    android:inputType="textPassword"
-                    android:textColor="@color/text_primary"
-                    android:textColorHint="@color/text_secondary"/>
-
-                <!-- 高级选项开关 -->
-                <CheckBox
-                    android:id="@+id/cb_advanced"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="高级选项（大多数人不用改）"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="12sp"
-                    android:layout_marginTop="6dp"
-                    android:buttonTint="@color/accent"/>
-
-                <!-- 高级字段 默认隐藏 勾"高级选项"展开 -->
-                <LinearLayout
-                    android:id="@+id/advanced_section"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:visibility="gone">
-
-                    <EditText
-                        android:id="@+id/et_node_id"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:hint="@string/hint_node_id"
-                        android:inputType="text"
-                        android:textColor="@color/text_primary"
-                        android:textColorHint="@color/text_secondary"/>
-
-                    <EditText
-                        android:id="@+id/et_vip"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:hint="@string/hint_vip"
-                        android:inputType="text"
-                        android:textColor="@color/text_primary"
-                        android:textColorHint="@color/text_secondary"
-                        android:text="auto"/>
-
-                    <EditText
-                        android:id="@+id/et_token"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:hint="@string/hint_token"
-                        android:inputType="textPassword"
-                        android:textColor="@color/text_primary"
-                        android:textColorHint="@color/text_secondary"/>
-
-                    <EditText
-                        android:id="@+id/et_forwards"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:hint="@string/hint_forwards"
-                        android:inputType="textMultiLine"
-                        android:minLines="2"
-                        android:maxLines="5"
-                        android:textColor="@color/text_primary"
-                        android:textColorHint="@color/text_secondary"/>
-
-                    <CheckBox
-                        android:id="@+id/cb_mesh"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="@string/cb_mesh"
-                        android:textColor="@color/text_secondary"
-                        android:textSize="13sp"
-                        android:layout_marginTop="4dp"
-                        android:buttonTint="@color/accent"/>
-
-                </LinearLayout>
-
+                    android:minHeight="32dp"
+                    android:paddingHorizontal="10dp"
+                    android:text="管理"
+                    android:textSize="11sp"/>
             </LinearLayout>
 
-            <!-- 日志区 -->
+            <!-- 服务列表（空时显示提示）-->
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rv_services"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"/>
+
+            <TextView
+                android:id="@+id/tv_empty_services"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:padding="24dp"
+                android:gravity="center"
+                android:text="还没有配置 NAS 服务\n点击右上角"管理"导入常用模板"
+                android:textColor="@color/text_secondary"
+                android:textSize="13sp"
+                android:background="@color/bg_card"/>
+
+            <!-- 日志可折叠 -->
             <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingTop="16dp"
+                android:paddingBottom="8dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="wrap_content"
+                    android:text="日志"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/accent"/>
+
+                <Button
+                    android:id="@+id/btn_toggle_log"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:minHeight="32dp"
+                    android:paddingHorizontal="10dp"
+                    android:text="展开"
+                    android:textSize="11sp"/>
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/log_container"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
                 android:background="@color/bg_card"
                 android:padding="10dp"
-                android:layout_marginTop="8dp">
+                android:visibility="gone">
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
-                    android:gravity="center_vertical">
-
-                    <TextView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="日志"
-                        android:textColor="@color/accent"
-                        android:textStyle="bold"/>
+                    android:gravity="end">
 
                     <Button
                         android:id="@+id/btn_copy"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:minHeight="36dp"
-                        android:minWidth="64dp"
+                        android:minHeight="32dp"
                         android:paddingHorizontal="10dp"
                         android:text="@string/btn_copy"
-                        android:textSize="12sp"
+                        android:textSize="11sp"
                         android:layout_marginEnd="6dp"/>
 
                     <Button
                         android:id="@+id/btn_clear"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:minHeight="36dp"
-                        android:minWidth="64dp"
+                        android:minHeight="32dp"
                         android:paddingHorizontal="10dp"
                         android:text="@string/btn_clear"
-                        android:textSize="12sp"/>
+                        android:textSize="11sp"/>
                 </LinearLayout>
 
                 <HorizontalScrollView
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content">
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp">
 
                     <TextView
                         android:id="@+id/tv_log"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:minHeight="240dp"
+                        android:minHeight="200dp"
                         android:fontFamily="monospace"
-                        android:textSize="11sp"
+                        android:textSize="10sp"
                         android:textColor="@color/text_primary"
-                        android:background="#00000000"
-                        android:paddingTop="4dp"/>
+                        android:background="#00000000"/>
                 </HorizontalScrollView>
             </LinearLayout>
 
+            <!-- 隐藏但保留的 config 字段（for buildYaml 用）-->
+            <LinearLayout
+                android:id="@+id/hidden_config"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:visibility="gone">
+
+                <EditText android:id="@+id/et_node_id" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+                <EditText android:id="@+id/et_server" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+                <EditText android:id="@+id/et_udp" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+                <EditText android:id="@+id/et_token" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+                <EditText android:id="@+id/et_pass" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+                <EditText android:id="@+id/et_vip" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="auto"/>
+                <EditText android:id="@+id/et_forwards" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+                <CheckBox android:id="@+id/cb_mesh" android:layout_width="wrap_content" android:layout_height="wrap_content" android:checked="true"/>
+                <CheckBox android:id="@+id/cb_advanced" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+                <LinearLayout android:id="@+id/advanced_section" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+                <Button android:id="@+id/btn_qr_scan" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+                <Button android:id="@+id/btn_qr_show" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+                <Button android:id="@+id/btn_services" android:layout_width="wrap_content" android:layout_height="wrap_content"/>
+            </LinearLayout>
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 

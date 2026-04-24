@@ -138,17 +138,10 @@ class MainActivity : AppCompatActivity() {
             selfTestAar()
             true
         }
-        binding.btnQrScan.setOnClickListener { startScanQr() }
-        binding.btnQrShow.setOnClickListener { showConfigQr() }
-        binding.btnServices.setOnClickListener {
-            startActivity(Intent(this, ServiceLauncherActivity::class.java))
-        }
-
-        // 高级选项折叠：默认收起 勾选后显示 node_id / vip / token / forwards / mesh
-        binding.cbAdvanced.setOnCheckedChangeListener { _, isChecked ->
-            binding.advancedSection.visibility = if (isChecked) View.VISIBLE else View.GONE
-            prefs.edit().putBoolean("show_advanced", isChecked).apply()
-        }
+        // v2 主页：服务网格 + 日志折叠 + 右上角菜单
+        setupServiceGrid()
+        setupMenu()
+        setupLogToggle()
 
         observeControllerState()
     }
@@ -463,6 +456,7 @@ class MainActivity : AppCompatActivity() {
                     if (vip.isNotEmpty()) binding.etVip.setText(vip)
                     binding.etNodeId.setText(nodeId)
                     binding.cbMesh.isChecked = mesh
+                    updateNodeInfo()
                     appendLogSafe("[v2] 配置已从服务器同步: vip=$vip")
                 }
             } catch (e: Exception) {
@@ -473,6 +467,100 @@ class MainActivity : AppCompatActivity() {
 
     private fun appendLogSafe(line: String) {
         runOnUiThread { appendLog(line) }
+    }
+
+    // ---- v2 主页 UI ----
+
+    private fun setupServiceGrid() {
+        val rv = findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.rv_services)
+        val tvEmpty = findViewById<View>(R.id.tv_empty_services)
+        rv.layoutManager = androidx.recyclerview.widget.GridLayoutManager(this, 3)
+
+        val items = NasServiceStore.load(this)
+        if (items.isEmpty()) {
+            rv.visibility = View.GONE
+            tvEmpty.visibility = View.VISIBLE
+        } else {
+            rv.visibility = View.VISIBLE
+            tvEmpty.visibility = View.GONE
+            rv.adapter = MainServiceAdapter(items) { svc ->
+                ServiceLauncher.open(this, svc)
+            }
+        }
+
+        findViewById<Button>(R.id.btn_manage_services).setOnClickListener {
+            startActivity(Intent(this, ServiceLauncherActivity::class.java))
+        }
+    }
+
+    private fun setupMenu() {
+        findViewById<android.widget.ImageButton>(R.id.btn_menu).setOnClickListener { anchor ->
+            val pop = android.widget.PopupMenu(this, anchor)
+            pop.menu.add("👤 账号：${AuthSession.getUsername()}").isEnabled = false
+            pop.menu.add("📡 查看 P2P 配置")
+            pop.menu.add("🔄 检查更新")
+            pop.menu.add("📷 扫码导入")
+            pop.menu.add("📤 分享配置 QR")
+            pop.menu.add("🔒 锁定")
+            pop.menu.add("🚪 登出")
+            pop.setOnMenuItemClickListener { m ->
+                when (m.title?.toString()) {
+                    "📡 查看 P2P 配置" -> showP2PConfigDialog()
+                    "🔄 检查更新" -> checkForUpdate(silent = false)
+                    "📷 扫码导入" -> startScanQr()
+                    "📤 分享配置 QR" -> showConfigQr()
+                    "🔒 锁定" -> {
+                        AuthSession.lock()
+                        startActivity(Intent(this, UnlockActivity::class.java))
+                        finish()
+                    }
+                    "🚪 登出" -> {
+                        AuthSession.logout(this)
+                        startActivity(Intent(this, LoginActivity::class.java))
+                        finish()
+                    }
+                }
+                true
+            }
+            pop.show()
+        }
+    }
+
+    private fun showP2PConfigDialog() {
+        val msg = buildString {
+            appendLine("Node ID: ${binding.etNodeId.text}")
+            appendLine("虚拟 IP: ${binding.etVip.text}")
+            appendLine("Server WS: ${binding.etServer.text}")
+            appendLine("Server UDP: ${binding.etUdp.text}")
+            append("Passphrase: ${"*".repeat(binding.etPass.text.length.coerceAtLeast(6))}")
+        }
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("P2P 配置（服务器下发 只读）")
+            .setMessage(msg)
+            .setPositiveButton("关闭", null)
+            .show()
+    }
+
+    private fun setupLogToggle() {
+        val logContainer = findViewById<View>(R.id.log_container)
+        val btn = findViewById<Button>(R.id.btn_toggle_log)
+        btn.setOnClickListener {
+            if (logContainer.visibility == View.VISIBLE) {
+                logContainer.visibility = View.GONE
+                btn.text = "展开"
+            } else {
+                logContainer.visibility = View.VISIBLE
+                btn.text = "收起"
+            }
+        }
+    }
+
+    // 更新状态卡片里的摘要（连接时显示 node 信息）
+    private fun updateNodeInfo() {
+        val info = findViewById<TextView>(R.id.tv_node_info)
+        val node = binding.etNodeId.text.toString()
+        val vip = binding.etVip.text.toString()
+        info.text = if (node.isNotEmpty() && vip.isNotEmpty()) "$node · $vip" else ""
     }
 
     private fun saveConfig() {
@@ -633,6 +721,12 @@ class MainActivity : AppCompatActivity() {
                 finish()
             }
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        // 返回主页时刷新服务列表（可能在 ServiceLauncherActivity 里增删过）
+        if (::binding.isInitialized) setupServiceGrid()
     }
 
     private fun requestNotificationPermissionIfNeeded() {
