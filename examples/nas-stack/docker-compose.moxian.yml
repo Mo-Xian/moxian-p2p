@@ -1,0 +1,25 @@
+# moxian-p2p 远程访问（可选 overlay）
+#
+# 使用条件：
+#   - 仅 Linux 真机（TUN + host 网络支持完善）
+#   - Docker Desktop / WSL2 下 host 网络 + /dev/net/tun 透传不稳 请勿用
+#
+# 启用方式：
+#   docker compose -f docker-compose.yml -f docker-compose.moxian.yml up -d
+#
+# Windows 用户别用这个 overlay 改用 moxian-gui.exe 原生 APP
+#   下载 https://github.com/Mo-Xian/moxian-p2p/releases/latest
+
+services:
+  moxian-client:
+    image: ghcr.io/mo-xian/moxian-p2p:latest
+    container_name: moxian-client
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    network_mode: host
+    volumes:
+      - ./configs/moxian/client.yaml:/etc/moxian/client.yaml:ro
+    command: ["-config", "/etc/moxian/client.yaml"]

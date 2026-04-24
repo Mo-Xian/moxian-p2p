@@ -100,18 +100,29 @@ info "=== Step 3/5 检查配置文件 ==="
 if [[ ! -f .env ]]; then
   if [[ -f .env.example ]]; then
     cp .env.example .env
-    warn ".env 不存在 已从 .env.example 复制  请务必编辑 .env 改密码后再 docker compose up"
+
+    # 自动生成随机密码替换所有 CHANGEME 占位符
+    IMMICH_PWD=$(openssl rand -hex 16 2>/dev/null || head -c 32 /dev/urandom | base64 | tr -d '/+=' | head -c 32)
+    VW_TOKEN=$(openssl rand -base64 48 2>/dev/null | tr -d '\n' || head -c 48 /dev/urandom | base64 | tr -d '\n')
+
+    sed -i "s|CHANGEME-immich-db-strong-password|$IMMICH_PWD|" .env
+    sed -i "s|CHANGEME-use-openssl-rand-base64-48|$VW_TOKEN|" .env
+    # 兜底 替换剩余 CHANGEME-* 为随机
+    sed -i "s|CHANGEME-[a-zA-Z0-9-]*|$(openssl rand -hex 12)|g" .env
+
+    ok ".env 从模板创建 + 所有密码已自动生成"
+    info "  Immich DB 密码: $IMMICH_PWD"
+    info "  Vaultwarden ADMIN_TOKEN: $VW_TOKEN"
+    info "  如需查看所有: cat .env"
   else
     err "找不到 .env 和 .env.example"
   fi
 else
-  ok ".env 已存在"
-fi
-
-# 检查 .env 里带 CHANGEME 的值
-if grep -q CHANGEME .env; then
-  warn ".env 中仍有 CHANGEME 占位符  启动前必须替换成强密码"
-  grep -n CHANGEME .env || true
+  ok ".env 已存在 跳过"
+  if grep -q CHANGEME .env; then
+    warn ".env 中仍有 CHANGEME 占位符 建议替换为强密码"
+    grep -n CHANGEME .env || true
+  fi
 fi
 
 if [[ ! -f configs/moxian/client.yaml ]]; then
@@ -199,11 +210,11 @@ ok "=========================================="
 ok "bootstrap 完成！后续步骤："
 ok "=========================================="
 echo
-echo "  1. 编辑 .env 把所有 CHANGEME 改成强密码"
-echo "  2. 编辑 configs/moxian/client.yaml 填写信令服务器和 passphrase"
-echo "  3. 启动所有服务："
-echo "       docker compose --profile p2p up -d    # 含 moxian-p2p 客户端（Linux 真机推荐）"
-echo "       docker compose up -d                   # 不含 moxian（另行 systemd 部署）"
+echo "  1. .env 密码已自动生成 如需查看: cat .env"
+echo "  2. 启动所有服务："
+echo "       docker compose up -d"
+echo "  3.（可选）想把 moxian-p2p 也跑容器？编辑 configs/moxian/client.yaml 然后:"
+echo "       docker compose -f docker-compose.yml -f docker-compose.moxian.yml up -d"
 echo "  4. 查看状态："
 echo "       docker compose ps"
 echo "       docker compose logs -f <service-name>"

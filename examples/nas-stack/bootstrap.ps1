@@ -89,6 +89,20 @@ $scriptDir = $PSScriptRoot
 $envPath = Join-Path $scriptDir ".env"
 $envExample = Join-Path $scriptDir ".env.example"
 
+# 生成 32 位随机密码（字母数字）
+function New-RandomPassword {
+    param([int]$Length = 32)
+    $chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+    -join ((1..$Length) | ForEach-Object { $chars[(Get-Random -Max $chars.Length)] })
+}
+
+# 生成 48 位 base64（适合 Vaultwarden admin token）
+function New-Base64Token {
+    $bytes = New-Object byte[] 36
+    [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+    [Convert]::ToBase64String($bytes)
+}
+
 if (-not (Test-Path $envPath)) {
     if (-not (Test-Path $envExample)) {
         Err "找不到 .env.example 请确认脚本运行在 nas-stack 目录下"
@@ -96,53 +110,62 @@ if (-not (Test-Path $envPath)) {
     Copy-Item $envExample $envPath
     Ok ".env 已从模板创建"
 
-    # 自动填入 DATA_ROOT 用户刚才选的路径
-    (Get-Content $envPath) `
-        -replace '^DATA_ROOT=.*$', "DATA_ROOT=$dataRootCompose" |
-        Set-Content $envPath
-    Ok "DATA_ROOT=$dataRootCompose 已写入 .env"
+    # 自动填入 DATA_ROOT
+    $envText = Get-Content $envPath -Raw
+    $envText = $envText -replace '(?m)^DATA_ROOT=.*$', "DATA_ROOT=$dataRootCompose"
+
+    # 自动生成随机密码替换所有 CHANGEME
+    $immichPwd = New-RandomPassword -Length 32
+    $vwToken = New-Base64Token
+    $envText = $envText -replace 'CHANGEME-immich-db-strong-password', $immichPwd
+    $envText = $envText -replace 'CHANGEME-use-openssl-rand-base64-48', $vwToken
+    # 兜底 替换所有剩余 CHANGEME-* 为通用密码
+    $envText = $envText -replace 'CHANGEME-[a-zA-Z0-9-]+', (New-RandomPassword -Length 24)
+
+    Set-Content -Path $envPath -Value $envText -NoNewline
+    Ok "DATA_ROOT 和所有密码已自动生成 写入 .env"
+    Info "  Immich DB 密码：$immichPwd"
+    Info "  Vaultwarden ADMIN_TOKEN：$vwToken"
+    Info "（如需查看所有密码：notepad $envPath）"
 } else {
-    Ok ".env 已存在 跳过（如需重置 手动删 .env 再跑）"
+    Ok ".env 已存在 跳过（如需重置 删 .env 再跑此脚本）"
+
+    # 仍然检查占位符 以防用户手动改过但还有漏网
+    $envContent = Get-Content $envPath -Raw
+    if ($envContent -match 'CHANGEME') {
+        Warn ".env 中仍有 CHANGEME 占位符 建议替换为强密码"
+        Select-String -Path $envPath -Pattern 'CHANGEME' | ForEach-Object {
+            Write-Host "  $($_.LineNumber): $($_.Line)" -ForegroundColor Yellow
+        }
+    }
 }
 
-# moxian client.yaml 也自动复制
+# moxian client.yaml 也自动复制（可选 Windows 下一般跑原生 gui 不用容器）
 $moxianCfgDir = Join-Path $scriptDir "configs\moxian"
 $moxianCfg = Join-Path $moxianCfgDir "client.yaml"
 $moxianCfgExample = Join-Path $moxianCfgDir "client.yaml.example"
 if (-not (Test-Path $moxianCfg) -and (Test-Path $moxianCfgExample)) {
     Copy-Item $moxianCfgExample $moxianCfg
-    Ok "moxian client.yaml 已从模板创建"
+    Ok "moxian client.yaml 已从模板创建（仅 Linux 用 overlay 时需要 Windows 可忽略）"
 }
 
-# 检查 CHANGEME 占位符
-$envContent = Get-Content $envPath -Raw
-if ($envContent -match 'CHANGEME') {
-    Warn ".env 中仍有 CHANGEME 占位符 启动前必须替换成强密码！"
-    Select-String -Path $envPath -Pattern 'CHANGEME' | ForEach-Object {
-        Write-Host "  $($_.LineNumber): $($_.Line)" -ForegroundColor Yellow
-    }
-}
+# ---- Step 4: 启动 ----
+Info "=== Step 4/4 启动服务 ==="
 
-# ---- Step 4: 可选启动 ----
-Info "=== Step 4/4 启动服务（可选）==="
-
-$ans = Read-Host "现在立刻 docker compose up -d 启动？[y/N]"
-if ($ans -match '^(y|Y)') {
-    if ($envContent -match 'CHANGEME') {
-        Warn "你的 .env 还有 CHANGEME 密码 强烈建议先改再启动"
-        $confirm = Read-Host "真的要用默认占位密码启动？[y/N]"
-        if ($confirm -notmatch '^(y|Y)') {
-            Info "已取消启动。编辑 $envPath 后手动跑: docker compose up -d"
-            exit 0
-        }
-    }
-
+$ans = Read-Host "现在立刻 docker compose up -d 启动？[Y/n]"
+if ($ans -notmatch '^(n|N)') {
     Push-Location $scriptDir
     try {
-        Info "拉取镜像 + 启动服务（首次 3-5 分钟）..."
+        Info "拉取镜像 + 启动服务（首次 3-5 分钟 约 5G 镜像）..."
         docker compose up -d
-        Write-Host ""
-        Ok "全部服务已启动 查看状态: docker compose ps"
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host ""
+            Ok "全部服务已启动"
+            Write-Host ""
+            docker compose ps
+        } else {
+            Warn "docker compose up 报错 见上方日志"
+        }
     } finally {
         Pop-Location
     }
@@ -175,8 +198,10 @@ if ($lanIp) {
 }
 Write-Host ""
 Write-Host "  下一步建议（看 README-windows.md 详细说明）："
-Write-Host "    1) 编辑 .env 把所有 CHANGEME 改成强密码 然后 docker compose up -d 重启"
-Write-Host "    2) 编辑 configs\moxian\client.yaml 填信令 server 和 passphrase"
-Write-Host "    3) 右键 $dataRoot → 属性 → 共享 开启 SMB 让局域网访问文件"
-Write-Host "    4) Windows Defender 添加 $dataRoot 为排除项避免 Docker I/O 慢"
+Write-Host "    1) 浏览器访问任一应用开始使用"
+Write-Host "    2) 需要从外网访问？下载原生 moxian-gui.exe 装托盘："
+Write-Host "         https://github.com/Mo-Xian/moxian-p2p/releases/latest"
+Write-Host "    3) 右键 $dataRoot → 属性 → 共享 开 SMB 让其他设备访问文件"
+Write-Host "    4) 装 Windows Defender 排除以加速 Docker I/O："
+Write-Host "         Add-MpPreference -ExclusionPath `"$dataRoot`""
 Write-Host ""

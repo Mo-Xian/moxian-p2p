@@ -32,40 +32,37 @@
 git clone https://github.com/Mo-Xian/moxian-p2p.git
 cd moxian-p2p/examples/nas-stack
 
-# 2. 宿主机初始化（装 Docker/Samba/UFW 建目录）
+# 2. 宿主机初始化（自动装 Docker/Samba/UFW 建目录 自动生成随机密码）
 sudo ./bootstrap.sh
 
-# 3. 填配置 + 启动
-cp .env.example .env
-vim .env                                # 所有 CHANGEME 改成强密码
+# 3. 启动（默认不含 moxian 容器）
+docker compose up -d
+
+# 4.（可选）想把 moxian-p2p 也用容器跑？加 overlay
+# 注意：仅 Linux 真机稳定 不要在 Docker Desktop/WSL2 下用
 cp configs/moxian/client.yaml.example configs/moxian/client.yaml
 vim configs/moxian/client.yaml          # 填 server 和 passphrase
-
-# 4. 启动：默认不起 moxian 容器 加 --profile p2p 才起
-docker compose --profile p2p up -d      # Linux 真机（含 moxian P2P 接入）
-# 或
-docker compose up -d                    # 只起应用栈 moxian 另外跑（systemd / 手动）
+docker compose -f docker-compose.yml -f docker-compose.moxian.yml up -d
 ```
 
 约 3-5 分钟镜像拉完，`docker compose ps` 全绿即成功。
-
-> **关于 `--profile p2p`**：`moxian-client` 容器需要 TUN 设备 + host 网络 仅 Linux 真机 + 非桌面 Docker 环境稳定 所以默认藏在 `p2p` profile 下 显式开启才启动。Windows / macOS Docker Desktop **不要**加这个 profile（改用主机原生 moxian-gui.exe）。
 
 ### 三步部署（Windows）
 
 ```powershell
 # 1. 装 Docker Desktop（需管理员一次）
 winget install Docker.DockerDesktop
+# 重启系统 等 Docker Desktop 启动变绿
 
-# 2. 拉代码 + 一键初始化
+# 2. 拉代码 + 一键启动（自动建目录 + 自动生成密码 + docker compose up -d）
 git clone https://github.com/Mo-Xian/moxian-p2p
 cd moxian-p2p\examples\nas-stack
 .\bootstrap.ps1
 
-# 3. 浏览器 http://localhost:2283 等
+# 3. 浏览器 http://localhost:2283 (Immich) / :8096 (Jellyfin) 等
 ```
 
-详细步骤和 SMB 共享 / Windows Defender 排除 / 迁移卸载 见 [`README-windows.md`](README-windows.md)。
+无需手动改任何 CHANGEME 密码，脚本自动生成并打印到终端。远程访问用原生 `moxian-gui.exe`（不用容器），详见 [`README-windows.md`](README-windows.md)。
 
 ### 访问
 

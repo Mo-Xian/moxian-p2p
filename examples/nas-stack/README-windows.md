@@ -33,7 +33,7 @@ docker compose version
 # Docker Compose version v2.x.x
 ```
 
-## 二、拉代码 + 一键初始化
+## 二、拉代码 + 一键启动
 
 ```powershell
 # 任意普通 PowerShell 不用管理员
@@ -41,35 +41,31 @@ cd C:\Users\你\
 git clone https://github.com/Mo-Xian/moxian-p2p
 cd moxian-p2p\examples\nas-stack
 
-# 跑初始化脚本 交互式问数据目录和是否立刻启动
+# 一条命令搞定
 .\bootstrap.ps1
 ```
 
-脚本会：
-1. 检查 Docker 是否可用
-2. 问你数据根目录（默认 `D:\nas-data`）
-3. 创建子目录骨架
-4. 从 `.env.example` 生成 `.env` 并**自动填入 DATA_ROOT**
-5. 复制 `configs\moxian\client.yaml.example` 到 `client.yaml`
-6. 提示你改 CHANGEME 占位符
-7. 可选：立刻 `docker compose up -d`
+脚本会交互式问你：
+1. 数据根目录（默认 `D:\nas-data`，回车接受）
+2. 是否立刻启动（默认 Y，回车接受）
 
-## 三、改密码（必做）
+然后自动完成：
+- 检查 Docker 是否可用
+- 创建数据目录骨架
+- 从 `.env.example` 生成 `.env`，**自动生成所有密码**（无需手动改 CHANGEME）
+- `docker compose up -d` 启动 6 个应用
 
-记事本打开 `.env`，把所有 `CHANGEME-*` 替换成强密码：
+**首次**启动要 3-5 分钟拉镜像（约 5G）。完成后所有服务可用。
 
-```env
-IMMICH_DB_PASSWORD=用 1Password 生成的 20 位密码
-VAULTWARDEN_ADMIN_TOKEN=用 openssl 或在线工具生成 base64 48 位
-```
+## 三、密码（已自动生成 无需手动改）
 
-Windows 里生成 base64 随机字符：
+`bootstrap.ps1` 会**自动生成随机强密码**写入 `.env`（终端会打印出来，记下来备用）。想查看所有密码：
 
 ```powershell
-[Convert]::ToBase64String((1..36 | ForEach-Object { Get-Random -Max 256 }))
+notepad .env
 ```
 
-保存后：
+想自己改也可以，改完后：
 
 ```powershell
 docker compose up -d
@@ -93,16 +89,20 @@ ipconfig | Select-String "IPv4"
 
 ## 五、moxian-p2p 远程访问（Windows 下用原生 exe）
 
-**重要**：compose 里的 `moxian-client` 服务**默认不启动**（受 `profiles: [p2p]` 保护）。原因：Docker Desktop / WSL2 下 host 网络 + TUN 设备透传不稳定，跑容器版 moxian 会各种坑。
+Windows / Docker Desktop 下**不要跑 moxian 容器**（TUN + host 网络在 WSL2 不稳）。用原生 Windows 版的 `moxian-gui.exe`（带托盘 UI）：
 
-**Windows 下怎么用**：直接跑**原生 Windows 版 moxian-gui.exe**（带托盘 UI），或命令行版 `moxian-client.exe`。
-
-1. 从 [Release 页](https://github.com/Mo-Xian/moxian-p2p/releases/latest) 下载 `moxian-gui.exe` + `wintun.dll`
-2. 放到同一文件夹 + 准备好 `client.yaml`（模板见 `configs\moxian\client.yaml.example`）
-3. **右键 `moxian-gui.exe` → 以管理员身份运行**（TUN 驱动要管理员）
+1. 从 [Release 页](https://github.com/Mo-Xian/moxian-p2p/releases/latest) 下载 `moxian-gui.exe` + `wintun.dll` + `client.yaml`（模板 `configs\moxian\client.yaml.example`）
+2. 放到同一文件夹
+3. **右键 `moxian-gui.exe` → 以管理员身份运行**（TUN 驱动需要管理员）
 4. 托盘图标右键菜单：启动 / 停止 / 编辑配置
 
-这样手机用 moxian-p2p APP 接入同一 mesh，就能通过虚拟 IP 访问这台 Windows 上的 Jellyfin / Immich 等服务。
+启动后手机装 moxian-p2p APP 接入同一 mesh，就能从外网通过虚拟 IP 访问这台 Windows 上的 Jellyfin / Immich 等。
+
+Linux 真机想把 moxian 也塞到 Docker 里？用 overlay：
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.moxian.yml up -d
+```
 
 ---
 
