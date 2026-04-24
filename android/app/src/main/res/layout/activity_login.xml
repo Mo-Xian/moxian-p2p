@@ -83,6 +83,16 @@
                 android:textColorHint="@color/text_secondary"
                 android:textSize="13sp"/>
 
+            <CheckBox
+                android:id="@+id/cb_insecure_tls"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="接受自签证书（家用 VPS 没公网域名时勾选）"
+                android:textSize="11sp"
+                android:textColor="@color/text_secondary"
+                android:buttonTint="@color/accent"
+                android:layout_marginTop="4dp"/>
+
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"

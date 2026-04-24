@@ -40,6 +40,7 @@ class LoginActivity : AppCompatActivity() {
     private lateinit var etUsername: EditText
     private lateinit var etPassword: EditText
     private lateinit var etInvite: EditText
+    private lateinit var cbInsecureTLS: android.widget.CheckBox
     private lateinit var btnSubmit: Button
     private lateinit var btnTabLogin: Button
     private lateinit var btnTabRegister: Button
@@ -72,6 +73,7 @@ class LoginActivity : AppCompatActivity() {
         etUsername = findViewById(R.id.et_username)
         etPassword = findViewById(R.id.et_password)
         etInvite = findViewById(R.id.et_invite)
+        cbInsecureTLS = findViewById(R.id.cb_insecure_tls)
         btnSubmit = findViewById(R.id.btn_submit)
         btnTabLogin = findViewById(R.id.btn_tab_login)
         btnTabRegister = findViewById(R.id.btn_tab_register)
@@ -85,6 +87,7 @@ class LoginActivity : AppCompatActivity() {
         val lastServer = prefs.getString("last_server", "") ?: ""
         if (lastServer.isNotEmpty()) etServer.setText(lastServer)
         else etServer.setText("https://")
+        cbInsecureTLS.isChecked = prefs.getBoolean("last_insecure_tls", false)
 
         btnTabLogin.setOnClickListener { switchMode(Mode.LOGIN) }
         btnTabRegister.setOnClickListener { switchMode(Mode.REGISTER) }
@@ -114,6 +117,7 @@ class LoginActivity : AppCompatActivity() {
         val username = etUsername.text.toString().trim()
         val password = etPassword.text.toString()
         val invite = etInvite.text.toString().trim().uppercase()
+        val insecure = cbInsecureTLS.isChecked
 
         if (server.isEmpty() || !(server.startsWith("http://") || server.startsWith("https://"))) {
             err("服务器 URL 必须以 http:// 或 https:// 开头"); return
@@ -122,12 +126,15 @@ class LoginActivity : AppCompatActivity() {
         if (password.length < 6) { err("密码最少 6 位"); return }
         if (mode == Mode.REGISTER && username.isEmpty()) { err("用户名必填"); return }
 
+        // 先把 insecure 应用到 AuthSession 供后续 HTTP 调用用
+        AuthSession.setInsecureTLS(insecure)
+
         setLoading(true)
         lifecycleScope.launch {
             val ok = withContext(Dispatchers.IO) {
                 try {
-                    if (mode == Mode.REGISTER) doRegister(server, email, username, password, invite)
-                    doLogin(server, email, password)
+                    if (mode == Mode.REGISTER) doRegister(server, email, username, password, invite, insecure)
+                    doLogin(server, email, password, insecure)
                 } catch (e: Exception) {
                     errOnMain("网络错误: ${e.message}")
                     false
@@ -136,17 +143,19 @@ class LoginActivity : AppCompatActivity() {
             setLoading(false)
             if (ok) {
                 AuthStore.prefs(this@LoginActivity).edit()
-                    .putString("last_server", server).apply()
+                    .putString("last_server", server)
+                    .putBoolean("last_insecure_tls", insecure)
+                    .apply()
                 goMain()
             }
         }
     }
 
     /** 注册流程 */
-    private suspend fun doRegister(server: String, email: String, username: String, password: String, invite: String): Boolean {
+    private suspend fun doRegister(server: String, email: String, username: String, password: String, invite: String, insecure: Boolean): Boolean {
         // 先 prelogin 取 iterations（新邮箱返回默认 600k）
         val pre = AuthSession.httpPostJsonNoAuth(server, "/api/auth/prelogin",
-            JSONObject().put("email", email).toString()) ?: run {
+            JSONObject().put("email", email).toString(), insecure) ?: run {
             errOnMain("连接服务器失败"); return false
         }
         val preObj = JSONObject(pre)
@@ -167,7 +176,7 @@ class LoginActivity : AppCompatActivity() {
             .put("invite_code", invite)
             .toString()
 
-        val resp = AuthSession.httpPostJsonNoAuth(server, "/api/auth/register", regBody)
+        val resp = AuthSession.httpPostJsonNoAuth(server, "/api/auth/register", regBody, insecure)
         if (resp == null) { errOnMain("注册请求失败"); return false }
         val obj = JSONObject(resp)
         if (obj.has("error")) {
@@ -178,9 +187,9 @@ class LoginActivity : AppCompatActivity() {
     }
 
     /** 登录流程 */
-    private suspend fun doLogin(server: String, email: String, password: String): Boolean {
+    private suspend fun doLogin(server: String, email: String, password: String, insecure: Boolean): Boolean {
         val pre = AuthSession.httpPostJsonNoAuth(server, "/api/auth/prelogin",
-            JSONObject().put("email", email).toString()) ?: run {
+            JSONObject().put("email", email).toString(), insecure) ?: run {
             errOnMain("连接服务器失败"); return false
         }
         val preObj = JSONObject(pre)
@@ -196,7 +205,7 @@ class LoginActivity : AppCompatActivity() {
             .put("email", email)
             .put("password_hash", pwdHash)
             .toString()
-        val resp = AuthSession.httpPostJsonNoAuth(server, "/api/auth/login", loginBody)
+        val resp = AuthSession.httpPostJsonNoAuth(server, "/api/auth/login", loginBody, insecure)
         if (resp == null) { errOnMain("登录请求失败"); return false }
         val obj = JSONObject(resp)
         if (obj.has("error")) {
@@ -217,7 +226,7 @@ class LoginActivity : AppCompatActivity() {
         withContext(Dispatchers.Main) {
             AuthSession.onLoginSuccess(
                 this@LoginActivity, server, email, jwt, userId,
-                username, isAdmin, kdfIter, masterKey, encVault, vaultVer
+                username, isAdmin, kdfIter, masterKey, encVault, vaultVer, insecure
             )
         }
         return true

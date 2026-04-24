@@ -4,6 +4,12 @@ import android.content.Context
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
+import javax.net.ssl.HostnameVerifier
+import javax.net.ssl.HttpsURLConnection
+import javax.net.ssl.SSLContext
+import javax.net.ssl.SSLSocketFactory
+import javax.net.ssl.TrustManager
+import javax.net.ssl.X509TrustManager
 
 /**
  * v2 认证会话 单例
@@ -36,6 +42,7 @@ object AuthSession {
     @Volatile private var isAdmin: Boolean = false
     @Volatile private var kdfIterations: Int = 600_000
     @Volatile private var vaultVersion: Long = 0
+    @Volatile private var insecureTLS: Boolean = false  // 自签证书场景
 
     // ---- 仅内存字段 ----
     @Volatile private var encKey: ByteArray? = null
@@ -59,6 +66,8 @@ object AuthSession {
     fun getKdfIterations(): Int = kdfIterations
     fun getVaultVersion(): Long = vaultVersion
     fun getVault(): VaultData? = decryptedVault
+    fun getInsecureTLS(): Boolean = insecureTLS
+    fun setInsecureTLS(v: Boolean) { insecureTLS = v }
 
     fun getEncKey(): ByteArray? = encKey
     fun getMacKey(): ByteArray? = macKey
@@ -76,6 +85,7 @@ object AuthSession {
         masterKey: ByteArray,
         encryptedVault: String,
         vaultVersion: Long,
+        insecureTLS: Boolean = false,
     ) {
         this.serverUrl = serverUrl.trimEnd('/')
         this.jwt = jwt
@@ -85,6 +95,7 @@ object AuthSession {
         this.isAdmin = isAdmin
         this.kdfIterations = kdfIter
         this.vaultVersion = vaultVersion
+        this.insecureTLS = insecureTLS
 
         // 派生 enc/mac key
         val (ek, mk) = BwCrypto.stretchMasterKey(masterKey)
@@ -107,6 +118,7 @@ object AuthSession {
             .putBoolean("session_admin", isAdmin)
             .putInt("session_kdf", kdfIter)
             .putLong("session_vault_ver", vaultVersion)
+            .putBoolean("session_insecure_tls", insecureTLS)
             .apply()
     }
 
@@ -123,6 +135,7 @@ object AuthSession {
         isAdmin = p.getBoolean("session_admin", false)
         kdfIterations = p.getInt("session_kdf", 600_000)
         vaultVersion = p.getLong("session_vault_ver", 0)
+        insecureTLS = p.getBoolean("session_insecure_tls", false)
         return true
     }
 
@@ -199,7 +212,7 @@ object AuthSession {
 
     // ---- HTTP helpers ----
     fun httpGet(ctx: Context, path: String): String? = try {
-        val conn = URL(serverUrl + path).openConnection() as HttpURLConnection
+        val conn = openConn(serverUrl + path)
         conn.requestMethod = "GET"
         conn.connectTimeout = 8000; conn.readTimeout = 15_000
         if (jwt.isNotEmpty()) conn.setRequestProperty("Authorization", "Bearer $jwt")
@@ -207,7 +220,7 @@ object AuthSession {
     } catch (e: Exception) { null }
 
     fun httpPostJson(ctx: Context, path: String, body: String): String? = try {
-        val conn = URL(serverUrl + path).openConnection() as HttpURLConnection
+        val conn = openConn(serverUrl + path)
         conn.requestMethod = "POST"
         conn.connectTimeout = 8000; conn.readTimeout = 15_000
         conn.setRequestProperty("Content-Type", "application/json")
@@ -220,8 +233,9 @@ object AuthSession {
     // 不走 JWT 的 POST（注册 / prelogin）
     // 无论 2xx / 4xx 都返回响应体字符串 调用方用 JSON 的 error 字段判断
     // 网络异常（连接不上 / 超时）返回 null
-    fun httpPostJsonNoAuth(serverBase: String, path: String, body: String): String? = try {
-        val conn = URL(serverBase.trimEnd('/') + path).openConnection() as HttpURLConnection
+    // @param insecure 如果是登录流程 用 LoginActivity 传进来的值（还未写入 AuthSession）
+    fun httpPostJsonNoAuth(serverBase: String, path: String, body: String, insecure: Boolean = insecureTLS): String? = try {
+        val conn = openConn(serverBase.trimEnd('/') + path, insecure)
         conn.requestMethod = "POST"
         conn.connectTimeout = 8000; conn.readTimeout = 15_000
         conn.setRequestProperty("Content-Type", "application/json")
@@ -229,7 +243,35 @@ object AuthSession {
         conn.outputStream.use { it.write(body.toByteArray()) }
         val stream = if (conn.responseCode in 200..299) conn.inputStream else conn.errorStream
         stream?.bufferedReader()?.use { it.readText() } ?: "{\"error\":\"HTTP ${conn.responseCode} empty body\"}"
-    } catch (e: Exception) { null }
+    } catch (e: Exception) {
+        android.util.Log.w("AuthSession", "httpPostJsonNoAuth failed: ${e.message}")
+        null
+    }
+
+    // 构造 HttpURLConnection 若是 https 且 insecure=true 安装 TrustAll
+    private fun openConn(url: String, insecure: Boolean = insecureTLS): HttpURLConnection {
+        val conn = URL(url).openConnection() as HttpURLConnection
+        if (insecure && conn is HttpsURLConnection) {
+            conn.sslSocketFactory = trustAllFactory()
+            conn.hostnameVerifier = HostnameVerifier { _, _ -> true }
+        }
+        return conn
+    }
+
+    @Volatile private var cachedFactory: SSLSocketFactory? = null
+    private fun trustAllFactory(): SSLSocketFactory {
+        cachedFactory?.let { return it }
+        val trustAll = arrayOf<TrustManager>(object : X509TrustManager {
+            override fun checkClientTrusted(chain: Array<out java.security.cert.X509Certificate>?, authType: String?) {}
+            override fun checkServerTrusted(chain: Array<out java.security.cert.X509Certificate>?, authType: String?) {}
+            override fun getAcceptedIssuers(): Array<java.security.cert.X509Certificate> = emptyArray()
+        })
+        val ctx = SSLContext.getInstance("TLS")
+        ctx.init(null, trustAll, java.security.SecureRandom())
+        val f = ctx.socketFactory
+        cachedFactory = f
+        return f
+    }
 }
 
 /** Vault 数据结构（解密后的 JSON 对象）*/
