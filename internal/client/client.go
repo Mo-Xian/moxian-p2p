@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -63,6 +64,9 @@ type Config struct {
 
 	// 限速：客户端总出站字节/秒（0=不限）
 	RateLimit int64
+
+	// 跳过 wss TLS 证书校验（自签证书 家用 VPS 常用）
+	InsecureTLS bool
 }
 
 // ForwardRule 本地端口 -> 远程节点的目标 host:port
@@ -210,13 +214,22 @@ func (c *Client) wsConnectLoop(ctx context.Context) error {
 	}
 }
 
+// wsDialer 构造 ws Dialer 若启用 InsecureTLS 则跳过证书校验
+func (c *Client) wsDialer() *websocket.Dialer {
+	d := *websocket.DefaultDialer
+	if c.cfg.InsecureTLS {
+		d.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	}
+	return &d
+}
+
 // runOneSession 完成一次 连接→注册→NAT 采样→读循环
 func (c *Client) runOneSession(ctx context.Context) error {
 	u, err := url.Parse(c.cfg.ServerURL)
 	if err != nil {
 		return err
 	}
-	ws, _, err := websocket.DefaultDialer.DialContext(ctx, u.String(), nil)
+	ws, _, err := c.wsDialer().DialContext(ctx, u.String(), nil)
 	if err != nil {
 		return fmt.Errorf("ws dial: %w", err)
 	}
@@ -352,7 +365,7 @@ func (c *Client) PeekVIP(ctx context.Context) (string, error) {
 	}
 	dialCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	ws, _, err := websocket.DefaultDialer.DialContext(dialCtx, u.String(), nil)
+	ws, _, err := c.wsDialer().DialContext(dialCtx, u.String(), nil)
 	if err != nil {
 		return "", fmt.Errorf("ws dial: %w", err)
 	}

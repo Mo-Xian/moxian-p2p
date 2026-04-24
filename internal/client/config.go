@@ -33,8 +33,9 @@ type FileConfig struct {
 	StatsAddr     string        `yaml:"stats_http"`
 	StatsInterval time.Duration `yaml:"stats_log"`
 
-	RateLimit string `yaml:"rate_limit"` // 如 "10MB" / "1.5MB"
-	Verbose   bool   `yaml:"verbose"`
+	RateLimit   string `yaml:"rate_limit"` // 如 "10MB" / "1.5MB"
+	Verbose     bool   `yaml:"verbose"`
+	InsecureTLS bool   `yaml:"insecure_tls"` // 自签证书跳过验证
 }
 
 // ForwardConfig 端口转发条目
@@ -119,6 +120,9 @@ func (fc *FileConfig) ApplyTo(cfg *Config) {
 		if v, err := parseSize(fc.RateLimit); err == nil {
 			cfg.RateLimit = v
 		}
+	}
+	if !cfg.InsecureTLS {
+		cfg.InsecureTLS = fc.InsecureTLS
 	}
 }
 

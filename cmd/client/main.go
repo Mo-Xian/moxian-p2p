@@ -121,6 +121,7 @@ func main() {
 		EnableMesh:    *mesh,
 		StatsAddr:     *statsHttp,
 		StatsInterval: *statsLog,
+		InsecureTLS:   *insecure,
 	}
 	if *allowStr != "" {
 		cfg.AllowTargets = strings.Split(*allowStr, ",")

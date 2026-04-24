@@ -281,6 +281,8 @@ class MainActivity : AppCompatActivity() {
         sb.appendLine("virtual_ip: \"$vip\"")
         sb.appendLine("mesh: $mesh")
         sb.appendLine("verbose: true")
+        // 从 AuthSession 带入自签证书标志 否则 Go 侧连 wss 会证书校验失败
+        if (AuthSession.getInsecureTLS()) sb.appendLine("insecure_tls: true")
         if (forwards.isNotEmpty()) {
             sb.appendLine("forwards:")
             for (f in forwards) {
