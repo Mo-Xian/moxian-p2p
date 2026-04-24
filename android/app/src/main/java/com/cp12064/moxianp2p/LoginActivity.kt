@@ -149,10 +149,11 @@ class LoginActivity : AppCompatActivity() {
             JSONObject().put("email", email).toString()) ?: run {
             errOnMain("连接服务器失败"); return false
         }
-        if (pre.contains("_error")) {
-            errOnMain("prelogin 失败: ${JSONObject(pre).optString("_error")}"); return false
+        val preObj = JSONObject(pre)
+        if (preObj.has("error")) {
+            errOnMain("prelogin 失败: ${preObj.optString("error")}"); return false
         }
-        val iterations = JSONObject(pre).optInt("kdf_iterations", 600_000)
+        val iterations = preObj.optInt("kdf_iterations", 600_000)
 
         // 派生 pwdHash
         val masterKey = BwCrypto.deriveMasterKey(password, email, iterations)
@@ -169,9 +170,8 @@ class LoginActivity : AppCompatActivity() {
         val resp = AuthSession.httpPostJsonNoAuth(server, "/api/auth/register", regBody)
         if (resp == null) { errOnMain("注册请求失败"); return false }
         val obj = JSONObject(resp)
-        if (obj.has("_error") || obj.has("error")) {
-            val e = obj.optString("_error").ifEmpty { obj.optString("error") }
-            errOnMain("注册失败: $e"); return false
+        if (obj.has("error")) {
+            errOnMain("注册失败: ${obj.optString("error")}"); return false
         }
         // 注册成功 继续登录
         return true
@@ -183,8 +183,9 @@ class LoginActivity : AppCompatActivity() {
             JSONObject().put("email", email).toString()) ?: run {
             errOnMain("连接服务器失败"); return false
         }
-        if (pre.contains("_error")) {
-            errOnMain("prelogin 失败: ${JSONObject(pre).optString("_error")}"); return false
+        val preObj = JSONObject(pre)
+        if (preObj.has("error")) {
+            errOnMain("prelogin 失败: ${preObj.optString("error")}"); return false
         }
         val iterations = JSONObject(pre).optInt("kdf_iterations", 600_000)
 
@@ -198,9 +199,8 @@ class LoginActivity : AppCompatActivity() {
         val resp = AuthSession.httpPostJsonNoAuth(server, "/api/auth/login", loginBody)
         if (resp == null) { errOnMain("登录请求失败"); return false }
         val obj = JSONObject(resp)
-        if (obj.has("_error") || obj.has("error")) {
-            val e = obj.optString("_error").ifEmpty { obj.optString("error") }
-            errOnMain("登录失败: $e"); return false
+        if (obj.has("error")) {
+            errOnMain("登录失败: ${obj.optString("error")}"); return false
         }
 
         val jwt = obj.optString("jwt")

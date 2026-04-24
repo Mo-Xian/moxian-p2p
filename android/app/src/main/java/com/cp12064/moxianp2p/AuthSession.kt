@@ -218,6 +218,8 @@ object AuthSession {
     } catch (e: Exception) { null }
 
     // 不走 JWT 的 POST（注册 / prelogin）
+    // 无论 2xx / 4xx 都返回响应体字符串 调用方用 JSON 的 error 字段判断
+    // 网络异常（连接不上 / 超时）返回 null
     fun httpPostJsonNoAuth(serverBase: String, path: String, body: String): String? = try {
         val conn = URL(serverBase.trimEnd('/') + path).openConnection() as HttpURLConnection
         conn.requestMethod = "POST"
@@ -226,14 +228,8 @@ object AuthSession {
         conn.doOutput = true
         conn.outputStream.use { it.write(body.toByteArray()) }
         val stream = if (conn.responseCode in 200..299) conn.inputStream else conn.errorStream
-        val txt = stream?.bufferedReader()?.use { it.readText() }
-        if (conn.responseCode in 200..299) txt else {
-            // 把错误塞回去让调用方读
-            JSONObject().put("_error", txt ?: "HTTP ${conn.responseCode}").toString()
-        }
-    } catch (e: Exception) {
-        JSONObject().put("_error", e.message ?: "network error").toString()
-    }
+        stream?.bufferedReader()?.use { it.readText() } ?: "{\"error\":\"HTTP ${conn.responseCode} empty body\"}"
+    } catch (e: Exception) { null }
 }
 
 /** Vault 数据结构（解密后的 JSON 对象）*/
