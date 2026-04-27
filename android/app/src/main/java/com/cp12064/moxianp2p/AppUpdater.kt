@@ -54,14 +54,14 @@ object AppUpdater {
         val conn = openConn(url)
         conn.connectTimeout = 4_000
         conn.readTimeout = 6_000
-        if (conn.responseCode != 200) return@checkFromServer null
+        if (conn.responseCode != 200) return null
         val body = conn.inputStream.bufferedReader().use { it.readText() }
         val obj = JSONObject(body)
         val tag = obj.optString("tag").removePrefix("v")
-        if (tag.isEmpty() || tag == current) return@checkFromServer null
-        if (!isNewer(tag, current)) return@checkFromServer null
+        if (tag.isEmpty() || tag == current) return null
+        if (!isNewer(tag, current)) return null
         val apkPath = obj.optString("apk_url")
-        if (apkPath.isEmpty()) return@checkFromServer null
+        if (apkPath.isEmpty()) return null
         val apkUrl = if (apkPath.startsWith("http")) apkPath else serverBase.trimEnd('/') + apkPath
         Release(tag = "v$tag", apkUrl = apkUrl, notes = obj.optString("notes"))
     } catch (_: Exception) { null }
@@ -74,9 +74,9 @@ object AppUpdater {
         val body = conn.inputStream.bufferedReader().use { it.readText() }
         val obj = JSONObject(body)
         val tag = obj.optString("tag_name").removePrefix("v")
-        if (tag.isEmpty() || tag == current) return@checkFromGitHub null
-        if (!isNewer(tag, current)) return@checkFromGitHub null
-        val assets = obj.optJSONArray("assets") ?: return@checkFromGitHub null
+        if (tag.isEmpty() || tag == current) return null
+        if (!isNewer(tag, current)) return null
+        val assets = obj.optJSONArray("assets") ?: return null
         var apkUrl = ""
         for (i in 0 until assets.length()) {
             val a = assets.getJSONObject(i)
@@ -85,7 +85,7 @@ object AppUpdater {
                 break
             }
         }
-        if (apkUrl.isEmpty()) return@checkFromGitHub null
+        if (apkUrl.isEmpty()) return null
         Release(tag = "v$tag", apkUrl = apkUrl, notes = obj.optString("body"))
     } catch (_: Exception) { null }
 
