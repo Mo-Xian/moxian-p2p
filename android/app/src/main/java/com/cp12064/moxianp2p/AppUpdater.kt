@@ -29,34 +29,82 @@ import java.net.URL
  */
 object AppUpdater {
 
-    private const val REPO_API = "https://api.github.com/repos/Mo-Xian/moxian-p2p/releases/latest"
+    private const val GH_API = "https://api.github.com/repos/Mo-Xian/moxian-p2p/releases/latest"
 
     data class Release(val tag: String, val apkUrl: String, val notes: String)
 
-    /** 查询最新 release 返回 null 表示网络错误或无新版 */
+    /**
+     * 查询最新 release 优先走用户的 moxian-server（国内连 GitHub 不稳）
+     * server 失败再 fallback GitHub
+     * 返回 null 表示无新版或两边都不可达
+     */
     suspend fun checkLatest(current: String): Release? = withContext(Dispatchers.IO) {
-        try {
-            val conn = URL(REPO_API).openConnection() as HttpURLConnection
-            conn.setRequestProperty("Accept", "application/vnd.github+json")
-            conn.connectTimeout = 5_000
-            conn.readTimeout = 5_000
-            val body = conn.inputStream.bufferedReader().use { it.readText() }
-            val obj = JSONObject(body)
-            val tag = obj.optString("tag_name").removePrefix("v")
-            if (tag.isEmpty() || tag == current) return@withContext null
-            if (!isNewer(tag, current)) return@withContext null
-            val assets = obj.optJSONArray("assets") ?: return@withContext null
-            var apkUrl = ""
-            for (i in 0 until assets.length()) {
-                val a = assets.getJSONObject(i)
-                if (a.optString("name").endsWith(".apk")) {
-                    apkUrl = a.optString("browser_download_url")
-                    break
-                }
+        // 1. 走自己的 server（已登录时）
+        val srvBase = AuthSession.getServerUrl()
+        if (srvBase.isNotBlank()) {
+            val r = checkFromServer(srvBase, current)
+            if (r != null) return@withContext r
+        }
+        // 2. fallback GitHub
+        return@withContext checkFromGitHub(current)
+    }
+
+    private fun checkFromServer(serverBase: String, current: String): Release? = try {
+        val url = serverBase.trimEnd('/') + "/api/release/latest"
+        val conn = openConn(url)
+        conn.connectTimeout = 4_000
+        conn.readTimeout = 6_000
+        if (conn.responseCode != 200) return@checkFromServer null
+        val body = conn.inputStream.bufferedReader().use { it.readText() }
+        val obj = JSONObject(body)
+        val tag = obj.optString("tag").removePrefix("v")
+        if (tag.isEmpty() || tag == current) return@checkFromServer null
+        if (!isNewer(tag, current)) return@checkFromServer null
+        val apkPath = obj.optString("apk_url")
+        if (apkPath.isEmpty()) return@checkFromServer null
+        val apkUrl = if (apkPath.startsWith("http")) apkPath else serverBase.trimEnd('/') + apkPath
+        Release(tag = "v$tag", apkUrl = apkUrl, notes = obj.optString("notes"))
+    } catch (_: Exception) { null }
+
+    private fun checkFromGitHub(current: String): Release? = try {
+        val conn = URL(GH_API).openConnection() as HttpURLConnection
+        conn.setRequestProperty("Accept", "application/vnd.github+json")
+        conn.connectTimeout = 5_000
+        conn.readTimeout = 5_000
+        val body = conn.inputStream.bufferedReader().use { it.readText() }
+        val obj = JSONObject(body)
+        val tag = obj.optString("tag_name").removePrefix("v")
+        if (tag.isEmpty() || tag == current) return@checkFromGitHub null
+        if (!isNewer(tag, current)) return@checkFromGitHub null
+        val assets = obj.optJSONArray("assets") ?: return@checkFromGitHub null
+        var apkUrl = ""
+        for (i in 0 until assets.length()) {
+            val a = assets.getJSONObject(i)
+            if (a.optString("name").endsWith(".apk")) {
+                apkUrl = a.optString("browser_download_url")
+                break
             }
-            if (apkUrl.isEmpty()) return@withContext null
-            Release(tag = "v$tag", apkUrl = apkUrl, notes = obj.optString("body"))
-        } catch (e: Exception) { null }
+        }
+        if (apkUrl.isEmpty()) return@checkFromGitHub null
+        Release(tag = "v$tag", apkUrl = apkUrl, notes = obj.optString("body"))
+    } catch (_: Exception) { null }
+
+    // 自签证书下也能开 — 复用 AuthSession 的 insecure 标志
+    private fun openConn(url: String): HttpURLConnection {
+        val conn = URL(url).openConnection() as HttpURLConnection
+        if (AuthSession.getInsecureTLS() && conn is javax.net.ssl.HttpsURLConnection) {
+            // 用反射方式调 trustAllFactory（AuthSession 私有），简化做法：直接装 trust-all
+            val trustAll = arrayOf<javax.net.ssl.TrustManager>(object : javax.net.ssl.X509TrustManager {
+                override fun checkClientTrusted(chain: Array<out java.security.cert.X509Certificate>?, authType: String?) {}
+                override fun checkServerTrusted(chain: Array<out java.security.cert.X509Certificate>?, authType: String?) {}
+                override fun getAcceptedIssuers(): Array<java.security.cert.X509Certificate> = emptyArray()
+            })
+            val ctx = javax.net.ssl.SSLContext.getInstance("TLS")
+            ctx.init(null, trustAll, java.security.SecureRandom())
+            conn.sslSocketFactory = ctx.socketFactory
+            conn.hostnameVerifier = javax.net.ssl.HostnameVerifier { _, _ -> true }
+        }
+        return conn
     }
 
     /** 对话框 + 下载 + 安装 一整套 */
@@ -73,6 +121,15 @@ object AppUpdater {
         val fileName = "moxian-p2p-${release.tag}.apk"
         val target = File(ctx.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), fileName)
         if (target.exists()) target.delete()
+
+        // 自己 server 自签证书 走手动下载（DownloadManager 不认）
+        // GitHub URL 走 DownloadManager（真证书 + 系统通知更友好）
+        val srvBase = AuthSession.getServerUrl()
+        val isOwnServer = srvBase.isNotBlank() && release.apkUrl.startsWith(srvBase.trimEnd('/'))
+        if (isOwnServer && AuthSession.getInsecureTLS()) {
+            manualDownloadAndInstall(ctx, release, target)
+            return
+        }
 
         val req = DownloadManager.Request(Uri.parse(release.apkUrl))
             .setTitle("moxian-p2p ${release.tag}")
@@ -103,6 +160,39 @@ object AppUpdater {
         }
 
         android.widget.Toast.makeText(ctx, "开始下载 完成后会自动弹安装界面", android.widget.Toast.LENGTH_SHORT).show()
+    }
+
+    // 用 HttpURLConnection 下载 支持自签证书 完成后弹安装
+    // 进度通过 Toast 提示开始 + 完成 中间不显示百分比（简化）
+    private fun manualDownloadAndInstall(ctx: Context, release: Release, target: File) {
+        android.widget.Toast.makeText(ctx,
+            "下载中（自签证书 走 APP 内部）...",
+            android.widget.Toast.LENGTH_SHORT).show()
+        // 后台线程下载
+        Thread {
+            try {
+                val conn = openConn(release.apkUrl)
+                conn.connectTimeout = 8_000
+                conn.readTimeout = 60_000
+                if (conn.responseCode !in 200..299) {
+                    throw RuntimeException("HTTP ${conn.responseCode}")
+                }
+                target.outputStream().use { out ->
+                    conn.inputStream.use { it.copyTo(out) }
+                }
+                // 主线程弹安装
+                android.os.Handler(ctx.mainLooper).post {
+                    android.widget.Toast.makeText(ctx, "下载完成 弹安装...",
+                        android.widget.Toast.LENGTH_SHORT).show()
+                    launchInstall(ctx, target)
+                }
+            } catch (e: Exception) {
+                android.os.Handler(ctx.mainLooper).post {
+                    android.widget.Toast.makeText(ctx, "下载失败: ${e.message}",
+                        android.widget.Toast.LENGTH_LONG).show()
+                }
+            }
+        }.start()
     }
 
     private fun launchInstall(ctx: Context, apk: File) {

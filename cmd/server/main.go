@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -31,6 +32,7 @@ func main() {
 	configFile := flag.String("config", "", "YAML 配置文件路径（CLI flag 优先）")
 	// ---- v2 新增 ----
 	dbPath := flag.String("db", "moxian.db", "SQLite 数据库路径")
+	releaseDir := flag.String("release-dir", "", "APK release 文件目录（留空=db 同级目录下 releases/）")
 	jwtSecret := flag.String("jwt-secret", "", "JWT 签名密钥（32+ 字节 留空则随机生成 重启后所有 token 失效）")
 	jwtTTL := flag.Duration("jwt-ttl", 24*time.Hour, "JWT 有效期")
 	flag.Parse()
@@ -181,8 +183,16 @@ func main() {
 	(&server.VaultAPI{DB: db, JWT: jwtMgr}).Register(mux)
 	(&server.ConfigAPI{DB: db, JWT: jwtMgr, ServerWS: publicWS, ServerUDP: publicUDP}).Register(mux)
 	(&server.AdminAPI{DB: db, JWT: jwtMgr}).Register(mux)
+
+	relDir := *releaseDir
+	if relDir == "" {
+		relDir = filepath.Join(filepath.Dir(*dbPath), "releases")
+	}
+	(&server.ReleaseAPI{JWT: jwtMgr, Dir: relDir}).Register(mux)
+	log.Printf("[release] dir=%s", relDir)
+
 	(&server.WebPanel{}).Register(mux)
-	log.Printf("[v2] auth / vault / config / admin API enabled")
+	log.Printf("[v2] auth / vault / config / admin / release API enabled")
 	log.Printf("[v2] web panel at http(s)://%s%s/", *publicHost, *wsAddr)
 
 	// ---- 老的 admin 面板 兼容保留（用 env MOXIAN_ADMIN_LEGACY=1 启用）----

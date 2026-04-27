@@ -130,8 +130,10 @@ async function loadMain() {
   if (user.is_admin) {
     document.getElementById("admin-card").classList.remove("hidden");
     document.getElementById("users-card").classList.remove("hidden");
+    document.getElementById("releases-card").classList.remove("hidden");
     await refreshInvites();
     await refreshUsers();
+    await refreshReleases();
   }
 }
 
@@ -250,6 +252,90 @@ async function resetPasswordFlow(userId, email) {
     alert("重置失败: " + e.message);
   }
 }
+
+// ---- Releases (admin) ----
+async function refreshReleases() {
+  try {
+    const r = await api("/api/admin/release/list");
+    const list = document.getElementById("releases-list");
+    if (!r.releases || r.releases.length === 0) {
+      list.innerHTML = '<div class="muted">还没有 release 上传一个 APK 文件吧</div>';
+      return;
+    }
+    const fmtSize = (n) => n >= 1024*1024 ? (n/1048576).toFixed(1)+" MB" : (n/1024).toFixed(1)+" KB";
+    const fmtTime = (ts) => new Date(ts*1000).toLocaleString();
+    list.innerHTML = `<table>
+      <thead><tr><th>tag</th><th>文件</th><th>大小</th><th>上传时间</th><th>状态</th><th>操作</th></tr></thead>
+      <tbody>${r.releases.map(e => `
+        <tr>
+          <td class="code">${escapeHtml(e.tag)}</td>
+          <td>${escapeHtml(e.filename)}</td>
+          <td>${fmtSize(e.size)}</td>
+          <td>${fmtTime(e.uploaded_at)}</td>
+          <td>${e.tag === r.latest ? '<b style="color:var(--accent)">✅ latest</b>' : ''}</td>
+          <td>
+            ${e.tag === r.latest ? '' : `<button class="promote-btn" data-tag="${escapeHtml(e.tag)}">设为 latest</button>`}
+            <button class="del-rel-btn" data-tag="${escapeHtml(e.tag)}">🗑️ 删除</button>
+          </td>
+        </tr>`).join("")}</tbody>
+    </table>`;
+    document.querySelectorAll(".promote-btn").forEach(b => {
+      b.onclick = async () => {
+        await api("/api/admin/release/promote", {
+          method: "POST", body: JSON.stringify({ tag: b.dataset.tag }),
+        });
+        await refreshReleases();
+      };
+    });
+    document.querySelectorAll(".del-rel-btn").forEach(b => {
+      b.onclick = async () => {
+        if (!confirm(`确定删除 ${b.dataset.tag}？`)) return;
+        await api("/api/admin/release?tag=" + encodeURIComponent(b.dataset.tag), { method: "DELETE" });
+        await refreshReleases();
+      };
+    });
+  } catch (e) { console.error(e); }
+}
+
+document.getElementById("upload-rel-btn").onclick = async () => {
+  const btn = document.getElementById("upload-rel-btn");
+  const msg = document.getElementById("upload-rel-msg");
+  msg.textContent = "";
+  const tag = document.getElementById("rel-tag").value.trim();
+  const notes = document.getElementById("rel-notes").value;
+  const fileInput = document.getElementById("rel-file");
+  if (!tag) { msg.textContent = "tag 必填"; return; }
+  if (!fileInput.files || fileInput.files.length === 0) { msg.textContent = "请选 APK 文件"; return; }
+  const file = fileInput.files[0];
+  if (file.size > 200 * 1024 * 1024) { msg.textContent = "APK 超过 200MB"; return; }
+
+  const fd = new FormData();
+  fd.append("tag", tag);
+  fd.append("notes", notes);
+  fd.append("file", file);
+
+  btn.disabled = true;
+  msg.textContent = `上传中 ${(file.size/1048576).toFixed(1)} MB...`;
+  try {
+    const token = localStorage.getItem("moxian_jwt");
+    const res = await fetch("/api/admin/release/upload", {
+      method: "POST",
+      headers: { "Authorization": "Bearer " + token },
+      body: fd,
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || res.statusText);
+    msg.textContent = `✅ 上传成功 sha256=${body.sha256.slice(0, 12)}...`;
+    document.getElementById("rel-tag").value = "";
+    document.getElementById("rel-notes").value = "";
+    fileInput.value = "";
+    await refreshReleases();
+  } catch (e) {
+    msg.textContent = "上传失败: " + e.message;
+  } finally {
+    btn.disabled = false;
+  }
+};
 
 // ---- Logout ----
 document.getElementById("logout-btn").onclick = () => logout();

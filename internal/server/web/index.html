@@ -126,6 +126,21 @@
       <h2>👥 所有用户（管理员）</h2>
       <div id="users-list"></div>
     </div>
+
+    <!-- 管理员：APK release -->
+    <div id="releases-card" class="card hidden">
+      <h2>📦 APK 版本（管理员）</h2>
+      <div class="muted" style="margin-bottom:12px">APP 端 自动检查更新走此服务器 不再依赖 GitHub</div>
+      <div id="releases-list"></div>
+      <div style="margin-top:16px; padding:12px; border:1px dashed var(--border); border-radius:6px;">
+        <label>上传新版 APK</label>
+        <input id="rel-tag" placeholder="版本 tag 例 v2.1.1"/>
+        <input id="rel-notes" placeholder="说明（可选）"/>
+        <input id="rel-file" type="file" accept=".apk"/>
+        <button id="upload-rel-btn">上传 + 设为最新</button>
+        <div id="upload-rel-msg" class="muted"></div>
+      </div>
+    </div>
   </div>
 </div>
 
