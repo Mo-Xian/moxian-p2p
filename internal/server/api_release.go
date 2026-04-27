@@ -32,6 +32,9 @@ import (
 type ReleaseAPI struct {
 	JWT *JWTManager
 	Dir string
+	// CIToken 非空时启用 /api/release/ci-upload  CI 流水线用此 token 直传 APK
+	// 不需要 admin JWT 走单独 token 验证 适合无人值守上传
+	CIToken string
 
 	mu       sync.Mutex
 	manifest *releaseManifest
@@ -65,6 +68,9 @@ func (a *ReleaseAPI) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/admin/release", a.JWT.AuthMiddleware(AdminOnly(a.handleDelete))) // DELETE
 	mux.HandleFunc("/api/release/latest", a.handleLatest)
 	mux.HandleFunc("/releases/", a.handleDownload)
+	if a.CIToken != "" {
+		mux.HandleFunc("/api/release/ci-upload", a.handleCIUpload)
+	}
 }
 
 // ---- manifest 读写 ----
@@ -179,6 +185,23 @@ func (a *ReleaseAPI) handleUpload(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{
 		"tag": tag, "filename": hdr.Filename, "sha256": sum, "size": written,
 	})
+}
+
+// POST /api/release/ci-upload (multipart)
+//   Header: X-Release-Token: <CI 配置的 token>
+//   form: tag, notes, file=apk
+// 与 admin/upload 等价 但用 token 验证 适合 CI 无人值守
+func (a *ReleaseAPI) handleCIUpload(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		writeErr(w, 405, "method not allowed")
+		return
+	}
+	got := r.Header.Get("X-Release-Token")
+	if a.CIToken == "" || got == "" || got != a.CIToken {
+		writeErr(w, 403, "invalid X-Release-Token")
+		return
+	}
+	a.handleUpload(w, r)
 }
 
 // POST /api/admin/release/promote {tag}

@@ -164,3 +164,32 @@ jobs:
             bin/moxian-p2p-debug.apk
             bin/wintun.dll
             bin/SHA256SUMS.txt
+
+      # ---- 自动推 APK 到 VPS（无人值守）----
+      # 需要在 repo settings → Secrets and variables → Actions 配两个 secret：
+      #   MOXIAN_RELEASE_URL    例 https://your-vps.com:7788
+      #   MOXIAN_RELEASE_TOKEN  与服务端 -release-ci-token 一致
+      # 没配 secret 此步会跳过 不影响 GitHub release
+      - name: Upload APK to VPS
+        if: ${{ env.MOXIAN_RELEASE_URL != '' && env.MOXIAN_RELEASE_TOKEN != '' }}
+        env:
+          MOXIAN_RELEASE_URL: ${{ secrets.MOXIAN_RELEASE_URL }}
+          MOXIAN_RELEASE_TOKEN: ${{ secrets.MOXIAN_RELEASE_TOKEN }}
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          set -e
+          echo "[upload] $MOXIAN_RELEASE_URL/api/release/ci-upload tag=$TAG"
+          # -k 容忍自签证书
+          HTTP_CODE=$(curl -sk -o /tmp/upload.json -w "%{http_code}" \
+            -H "X-Release-Token: $MOXIAN_RELEASE_TOKEN" \
+            -F "tag=$TAG" \
+            -F "notes=自动从 GitHub Actions 推送" \
+            -F "file=@bin/moxian-p2p-debug.apk" \
+            "$MOXIAN_RELEASE_URL/api/release/ci-upload")
+          echo "[upload] HTTP $HTTP_CODE"
+          cat /tmp/upload.json
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "::warning::APK 推送 VPS 失败 HTTP $HTTP_CODE — GitHub release 仍正常"
+            exit 0
+          fi
+          echo "✅ APK 已推送到 VPS 并设为 latest"

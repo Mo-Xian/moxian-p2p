@@ -33,6 +33,7 @@ func main() {
 	// ---- v2 新增 ----
 	dbPath := flag.String("db", "moxian.db", "SQLite 数据库路径")
 	releaseDir := flag.String("release-dir", "", "APK release 文件目录（留空=db 同级目录下 releases/）")
+	releaseCIToken := flag.String("release-ci-token", "", "CI 流水线上传 APK 用的 token（留空=禁用 ci-upload 端点）也可用环境变量 MOXIAN_RELEASE_CI_TOKEN")
 	jwtSecret := flag.String("jwt-secret", "", "JWT 签名密钥（32+ 字节 留空则随机生成 重启后所有 token 失效）")
 	jwtTTL := flag.Duration("jwt-ttl", 24*time.Hour, "JWT 有效期")
 	flag.Parse()
@@ -188,8 +189,12 @@ func main() {
 	if relDir == "" {
 		relDir = filepath.Join(filepath.Dir(*dbPath), "releases")
 	}
-	(&server.ReleaseAPI{JWT: jwtMgr, Dir: relDir}).Register(mux)
-	log.Printf("[release] dir=%s", relDir)
+	ciTok := *releaseCIToken
+	if ciTok == "" {
+		ciTok = os.Getenv("MOXIAN_RELEASE_CI_TOKEN")
+	}
+	(&server.ReleaseAPI{JWT: jwtMgr, Dir: relDir, CIToken: ciTok}).Register(mux)
+	log.Printf("[release] dir=%s ci-upload=%v", relDir, ciTok != "")
 
 	(&server.WebPanel{}).Register(mux)
 	log.Printf("[v2] auth / vault / config / admin / release API enabled")

@@ -80,6 +80,15 @@ else
   ok "JWT 密钥已存在 保留 $JWT_FILE"
 fi
 
+# ---- 4.1 CI 上传 token（GitHub Actions 推 APK 用 已存在则保留）----
+CI_TOKEN_FILE=/etc/moxian/ci_release.token
+if [[ ! -s "$CI_TOKEN_FILE" ]]; then
+  openssl rand -hex 24 > "$CI_TOKEN_FILE"
+  chmod 600 "$CI_TOKEN_FILE"
+  ok "CI release token 已生成 $CI_TOKEN_FILE"
+fi
+CI_TOKEN_VAL=$(cat "$CI_TOKEN_FILE")
+
 # ---- 5. 自签 TLS 证书（已存在则保留 除非 5 年内将过期）----
 CERT=/etc/moxian/tls/cert.pem
 KEY=/etc/moxian/tls/key.pem
@@ -135,12 +144,15 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=root
+Environment=MOXIAN_RELEASE_CI_TOKEN_FILE=${CI_TOKEN_FILE}
 ExecStart=/bin/sh -c '/usr/local/bin/moxian-server \\
   -host ${PUBLIC_IP} \\
   -ws :7788 -udp :7789 -udp2 :7790 \\
   -tls-cert ${CERT} \\
   -tls-key  ${KEY} \\
   -db /var/lib/moxian/moxian.db \\
+  -release-dir /var/lib/moxian/releases \\
+  -release-ci-token "\$(cat ${CI_TOKEN_FILE})" \\
   -jwt-secret "\$(cat ${JWT_FILE})"'
 Restart=always
 RestartSec=5
@@ -195,8 +207,17 @@ echo
 echo "  Web 面板:   https://${PUBLIC_IP}:7788/"
 echo "  数据库:     /var/lib/moxian/moxian.db"
 echo "  JWT 密钥:   $JWT_FILE"
+echo "  CI Token:   $CI_TOKEN_FILE"
+echo "  Release 目录: /var/lib/moxian/releases/"
 echo "  TLS 证书:   $CERT (自签 10 年)"
 echo "  日志:       journalctl -u moxian-server -f"
+echo
+echo -e "${C_INFO}GitHub Actions 自动推 APK 配置（一次性）:${C_OFF}"
+echo "  到 https://github.com/Mo-Xian/moxian-p2p/settings/secrets/actions"
+echo "  添加两个 secret:"
+echo "    MOXIAN_RELEASE_URL    = https://${PUBLIC_IP}:7788"
+echo "    MOXIAN_RELEASE_TOKEN  = $CI_TOKEN_VAL"
+echo "  之后每次 git tag v* 推送 CI 自动把 APK 推到此 VPS"
 echo
 echo -e "${C_INFO}下一步:${C_OFF}"
 echo "  1. 浏览器开 https://${PUBLIC_IP}:7788/"
