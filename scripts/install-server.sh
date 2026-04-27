@@ -104,7 +104,29 @@ fi
 
 # ---- 6. systemd unit ----
 UNIT=/etc/systemd/system/moxian-server.service
+
+# 保护用户的自定义：检测 unit 是否被改过 改过就备份
+# 判定依据：unit 内容含我们以前生成的 marker（# moxian-managed）
+WRITE_UNIT=true
+if [[ -f "$UNIT" ]]; then
+  if ! grep -q "# moxian-managed" "$UNIT"; then
+    BAK="${UNIT}.bak.$(date +%Y%m%d_%H%M%S)"
+    warn "$UNIT 似乎被你手动改过（无 moxian-managed 标记）"
+    warn "已备份为 $BAK"
+    cp "$UNIT" "$BAK"
+    if [[ -t 0 ]]; then
+      read -rp "覆盖 unit 用脚本默认配置？[y/N] " ans
+      [[ "${ans,,}" == "y" ]] || WRITE_UNIT=false
+    else
+      warn "非交互运行（管道）默认不覆盖 自定义保留"
+      WRITE_UNIT=false
+    fi
+  fi
+fi
+
+if [[ "$WRITE_UNIT" == true ]]; then
 cat > "$UNIT" <<EOF
+# moxian-managed (此行勿删 重跑安装脚本时用于检测自定义)
 [Unit]
 Description=moxian-p2p v2 signaling + auth server
 After=network-online.target
@@ -127,7 +149,10 @@ LimitNOFILE=65536
 [Install]
 WantedBy=multi-user.target
 EOF
-ok "systemd unit 已写入 $UNIT"
+  ok "systemd unit 已写入 $UNIT"
+else
+  ok "systemd unit 保留用户自定义（未覆盖）"
+fi
 
 systemctl daemon-reload
 systemctl enable moxian-server >/dev/null 2>&1

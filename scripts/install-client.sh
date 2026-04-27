@@ -91,7 +91,15 @@ ok "凭据写入 $ENV_FILE (mode 600)"
 
 # ---- systemd unit ----
 UNIT=/etc/systemd/system/moxian-client.service
+
+# 保护用户自定义
+if [[ -f "$UNIT" ]] && ! grep -q "# moxian-managed" "$UNIT"; then
+  BAK="${UNIT}.bak.$(date +%Y%m%d_%H%M%S)"
+  warn "$UNIT 似乎被手动改过 备份为 $BAK 并保留原 unit"
+  cp "$UNIT" "$BAK"
+else
 cat > "$UNIT" <<'EOF'
+# moxian-managed (此行勿删 重跑安装脚本时用于检测自定义)
 [Unit]
 Description=moxian-p2p v2 client
 After=network-online.target
@@ -116,7 +124,8 @@ CapabilityBoundingSet=CAP_NET_ADMIN
 [Install]
 WantedBy=multi-user.target
 EOF
-ok "systemd unit: $UNIT"
+  ok "systemd unit: $UNIT"
+fi
 
 systemctl daemon-reload
 systemctl enable moxian-client >/dev/null 2>&1
