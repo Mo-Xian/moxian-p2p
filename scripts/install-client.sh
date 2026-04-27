@@ -49,32 +49,71 @@ rm -f "$TMP"
 ok "已安装到 /usr/local/bin/moxian-client"
 
 # ---- 收集凭据 ----
+# 每次都问 但显示旧值 回车保留
+install -d -m 755 /etc/moxian
 ENV_FILE=/etc/moxian/client.env
+
+# 加载旧值（如有）
+OLD_SERVER=""; OLD_EMAIL=""; OLD_PWD=""; OLD_NODE=""; OLD_INSECURE=""
 if [[ -f "$ENV_FILE" ]]; then
-  warn "$ENV_FILE 已存在 跳过凭据收集（仅升级 binary）"
-  systemctl restart moxian-client 2>/dev/null || true
-  ok "升级完成"
-  exit 0
+  # 安全 source（控制白名单避免奇怪命令注入）
+  while IFS='=' read -r k v; do
+    case "$k" in
+      MOXIAN_SERVER)   OLD_SERVER="$v" ;;
+      MOXIAN_EMAIL)    OLD_EMAIL="$v" ;;
+      MOXIAN_PASSWORD) OLD_PWD="$v" ;;
+      MOXIAN_NODE)     OLD_NODE="$v" ;;
+      MOXIAN_INSECURE) OLD_INSECURE="$v" ;;
+    esac
+  done < "$ENV_FILE"
+  echo
+  info "检测到现有配置 直接回车保留旧值"
 fi
 
-install -d -m 755 /etc/moxian
-
-read -rp "moxian-server URL (如 https://1.2.3.4:7788): " SERVER
+# 服务器 URL
+if [[ -n "$OLD_SERVER" ]]; then
+  read -rp "moxian-server URL [默认 $OLD_SERVER]: " SERVER
+  SERVER="${SERVER:-$OLD_SERVER}"
+else
+  read -rp "moxian-server URL (如 https://1.2.3.4:7788): " SERVER
+fi
 [[ -n "$SERVER" ]] || err "URL 必填"
 
-read -rp "邮箱: " EMAIL
+# 邮箱
+if [[ -n "$OLD_EMAIL" ]]; then
+  read -rp "邮箱 [默认 $OLD_EMAIL]: " EMAIL
+  EMAIL="${EMAIL:-$OLD_EMAIL}"
+else
+  read -rp "邮箱: " EMAIL
+fi
 [[ -n "$EMAIL" ]] || err "邮箱必填"
 
-read -rsp "主密码: " PWD; echo
+# 主密码
+if [[ -n "$OLD_PWD" ]]; then
+  read -rsp "主密码 [回车保留旧值 已设置 ${#OLD_PWD} 位]: " PWD; echo
+  PWD="${PWD:-$OLD_PWD}"
+else
+  read -rsp "主密码: " PWD; echo
+fi
 [[ -n "$PWD" ]] || err "密码必填"
 
-DEFAULT_NODE=$(hostname -s 2>/dev/null || echo "linux-$(date +%s)")
+# 节点名
+DEFAULT_NODE="${OLD_NODE:-$(hostname -s 2>/dev/null || echo "linux-$(date +%s)")}"
 read -rp "节点名 [默认 $DEFAULT_NODE]: " NODE
 NODE="${NODE:-$DEFAULT_NODE}"
 
+# TLS 跳过
 INSECURE_FLAG=""
 if [[ "$SERVER" == https://* ]]; then
-  read -rp "是否跳过 TLS 证书验证（家用自签证书选 y）[y/N]: " ans
+  if [[ "$OLD_INSECURE" == "-insecure-tls" ]]; then
+    DEFAULT_HINT="Y/n"
+    DEFAULT_VAL="y"
+  else
+    DEFAULT_HINT="y/N"
+    DEFAULT_VAL="n"
+  fi
+  read -rp "跳过 TLS 证书验证（家用自签证书选 y）[$DEFAULT_HINT]: " ans
+  ans="${ans:-$DEFAULT_VAL}"
   [[ "${ans,,}" == "y" ]] && INSECURE_FLAG="-insecure-tls"
 fi
 

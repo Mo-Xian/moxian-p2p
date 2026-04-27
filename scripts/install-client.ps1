@@ -44,47 +44,96 @@ DownloadAsset "moxian-client.exe"     "$INSTALL_DIR\moxian-client.exe"
 DownloadAsset "wintun.dll"            "$INSTALL_DIR\wintun.dll"
 Ok "二进制下载完成"
 
-# ---- 2. 收集凭据（只在第一次安装时）----
+# ---- 2. 收集凭据（每次都问 但显示默认值 回车保留）----
 $YAML = "$INSTALL_DIR\client.yaml"
-if (-not (Test-Path $YAML)) {
-    Write-Host ""
+
+# 读旧 yaml（如果存在）作为默认值
+function Get-YamlValue($path, $key) {
+    if (-not (Test-Path $path)) { return "" }
+    $line = Get-Content $path | Where-Object { $_ -match "^\s*$key\s*:" } | Select-Object -First 1
+    if (-not $line) { return "" }
+    $val = ($line -split ":", 2)[1].Trim()
+    # 去引号
+    if ($val.StartsWith('"') -and $val.EndsWith('"')) { $val = $val.Substring(1, $val.Length - 2) }
+    return $val
+}
+
+$oldServer   = Get-YamlValue $YAML "v2_server"
+$oldEmail    = Get-YamlValue $YAML "v2_email"
+$oldPwd      = Get-YamlValue $YAML "v2_password"
+$oldNode     = Get-YamlValue $YAML "v2_node"
+$oldInsecure = Get-YamlValue $YAML "v2_insecure_tls"
+
+Write-Host ""
+if ($oldServer) {
+    Write-Host "检测到现有配置（回车保留旧值）:" -ForegroundColor Cyan
+} else {
     Write-Host "请输入连接信息:" -ForegroundColor Cyan
+}
 
-    $server = Read-Host "moxian-server URL (如 https://1.2.3.4:7788)"
-    if (-not $server) { Err "URL 必填" }
+# 服务器 URL
+$prompt = if ($oldServer) { "moxian-server URL [默认: $oldServer]" } else { "moxian-server URL (如 https://1.2.3.4:7788)" }
+$server = Read-Host $prompt
+if (-not $server) {
+    if ($oldServer) { $server = $oldServer } else { Err "URL 必填" }
+}
 
-    $email = Read-Host "邮箱"
-    if (-not $email) { Err "邮箱必填" }
+# 邮箱
+$prompt = if ($oldEmail) { "邮箱 [默认: $oldEmail]" } else { "邮箱" }
+$email = Read-Host $prompt
+if (-not $email) {
+    if ($oldEmail) { $email = $oldEmail } else { Err "邮箱必填" }
+}
 
+# 主密码
+$pwdPlain = ""
+if ($oldPwd) {
+    $pwdLen = $oldPwd.Length
+    $hint = "主密码 [回车保留旧值 已设置 $pwdLen 位]"
+    Write-Host -NoNewline "$hint`: "
+    $pwd = Read-Host -AsSecureString
+    $pwdPlain = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($pwd)
+    )
+    if (-not $pwdPlain) { $pwdPlain = $oldPwd }
+} else {
     $pwd = Read-Host "主密码（输入时不显示）" -AsSecureString
     $pwdPlain = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
         [Runtime.InteropServices.Marshal]::SecureStringToBSTR($pwd)
     )
     if (-not $pwdPlain) { Err "密码必填" }
+}
 
-    $defaultNode = $env:COMPUTERNAME
-    $node = Read-Host "节点名 [默认 $defaultNode]"
-    if (-not $node) { $node = $defaultNode }
+# 节点名
+$defaultNode = if ($oldNode) { $oldNode } else { $env:COMPUTERNAME }
+$node = Read-Host "节点名 [默认: $defaultNode]"
+if (-not $node) { $node = $defaultNode }
 
-    $insecureAns = "n"
-    if ($server.StartsWith("https://")) {
-        $insecureAns = Read-Host "跳过 TLS 证书验证（家用自签证书选 y）[y/N]"
+# TLS 跳过
+$insecure = "false"
+if ($server.StartsWith("https://")) {
+    $defaultAns = if ($oldInsecure -eq "true") { "Y/n" } else { "y/N" }
+    $insecureAns = Read-Host "跳过 TLS 证书验证（家用自签证书选 y）[$defaultAns]"
+    if (-not $insecureAns) {
+        $insecure = if ($oldInsecure -eq "true") { "true" } else { "false" }
+    } else {
+        $insecure = if ($insecureAns -match '^y') { "true" } else { "false" }
     }
-    $insecure = if ($insecureAns -match '^y') { "true" } else { "false" }
+}
 
-    # client.yaml v2 模式 给原生 GUI 用
-    $yamlContent = @"
-# v2 模式 凭据通过登录拿到的 JWT 自动获取 此文件主要给 GUI 显示用
-# 实际生效的是登录后服务器下发的 config
+# 写 client.yaml
+$yamlContent = @"
+# moxian-p2p v2 客户端配置
+# 由 install-client.ps1 自动生成 重跑脚本会保留旧值并允许覆盖
 
-# v2 登录信息
+# v2 登录信息（GUI 启动时用这些自动登录服务器拉配置）
 v2_server: "$server"
 v2_email: "$email"
 v2_password: "$pwdPlain"
 v2_node: "$node"
 v2_insecure_tls: $insecure
 
-# 以下字段会被服务器 /api/config 覆盖 不用手填
+# 以下字段由服务器 /api/config 自动填充 不用手填
 node_id: "$node"
 server: ""
 udp: ""
@@ -93,12 +142,9 @@ virtual_ip: "auto"
 mesh: true
 verbose: false
 "@
-    Set-Content -Path $YAML -Value $yamlContent -Encoding UTF8
-    icacls $YAML /inheritance:r /grant:r "$($env:USERNAME):F" /grant:r "Administrators:F" 2>&1 | Out-Null
-    Ok "client.yaml 已生成: $YAML"
-} else {
-    Ok "client.yaml 已存在 跳过"
-}
+Set-Content -Path $YAML -Value $yamlContent -Encoding UTF8
+icacls $YAML /inheritance:r /grant:r "$($env:USERNAME):F" /grant:r "Administrators:F" 2>&1 | Out-Null
+Ok "client.yaml 已写入: $YAML"
 
 # ---- 3. 创建桌面快捷方式（带管理员标记）----
 $shell = New-Object -ComObject WScript.Shell
