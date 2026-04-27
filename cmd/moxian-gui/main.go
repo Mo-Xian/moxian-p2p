@@ -70,11 +70,17 @@ func sanitizeHostname() string {
 	return h
 }
 
-// 检查 client.yaml 是否含 v2 自动登录字段 决定要不要 onReady 后自动启动
-func hasV2AutoStart() bool {
+// 检查 client.yaml 是否可以自动启动
+// 两种情况都触发自动启动：
+//   1. v1 字段已烘焙（server + pass + server_udp 齐全）—— 安装脚本已拉好配置 直接跑
+//   2. 仅有 v2 字段（v2_server + v2_email + v2_password）—— 启动时再去登录拉配置
+func hasAutoStart() bool {
 	fc, err := client.LoadFile(configPath())
 	if err != nil {
 		return false
+	}
+	if fc.ServerURL != "" && fc.Passphrase != "" && fc.ServerUDP != "" {
+		return true
 	}
 	return fc.V2Server != "" && fc.V2Email != "" && fc.V2Password != ""
 }
@@ -118,9 +124,9 @@ func onReady() {
 		}
 	}()
 
-	// v2 模式：client.yaml 配齐了登录信息 自动启动 用户不用再点"启动"
-	if hasV2AutoStart() {
-		log.Printf("[gui] v2 配置就绪 自动启动")
+	// 配置就绪 自动启动 用户不用再点"启动"
+	if hasAutoStart() {
+		log.Printf("[gui] 配置就绪 自动启动")
 		go doStart()
 	}
 }
@@ -155,10 +161,14 @@ func doStart() {
 	var cfg client.Config
 	fc.ApplyTo(&cfg)
 
-	// ---- v2 登录模式 ----
-	// 若 client.yaml 含 v2_server / v2_email / v2_password 则走 v2 登录流程
-	// 自动从服务器拉 P2P 配置（pass / virtual_ip / server_ws / udp / peers）
-	if fc.V2Server != "" && fc.V2Email != "" && fc.V2Password != "" {
+	// 启动策略（优先级）：
+	//   1. v1 字段齐全（安装脚本已烘焙）—— 直接用 yaml 内值 不联网拉
+	//   2. 仅 v2 字段 —— 走 v2 登录流程 从 server 拉 P2P 配置
+	v1Ready := cfg.ServerURL != "" && cfg.Passphrase != "" && cfg.ServerUDP != ""
+	if v1Ready {
+		log.Printf("[gui] 使用本地烘焙配置 node=%s vip=%s server=%s",
+			cfg.NodeID, cfg.VirtualIP, cfg.ServerURL)
+	} else if fc.V2Server != "" && fc.V2Email != "" && fc.V2Password != "" {
 		log.Printf("[gui] v2 登录: %s as %s", fc.V2Server, fc.V2Email)
 		setState("登录中", 0xFF, 0xD4, 0x79)
 		ac := client.NewAuthClient(fc.V2Server, fc.V2InsecureTLS)
@@ -179,7 +189,6 @@ func doStart() {
 			menuStart.Enable()
 			return
 		}
-		// 用服务器返回值覆盖 cfg 中可能为空的字段
 		cfg.NodeID = v2cfg.NodeID
 		cfg.ServerURL = v2cfg.ServerWS
 		cfg.ServerUDP = v2cfg.ServerUDP
