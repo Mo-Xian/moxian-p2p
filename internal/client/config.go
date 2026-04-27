@@ -36,6 +36,13 @@ type FileConfig struct {
 	RateLimit   string `yaml:"rate_limit"` // 如 "10MB" / "1.5MB"
 	Verbose     bool   `yaml:"verbose"`
 	InsecureTLS bool   `yaml:"insecure_tls"` // 自签证书跳过验证
+
+	// v2 登录字段（GUI/CLI 用 启动时若有 V2Server 则跑 v2 登录流程）
+	V2Server      string `yaml:"v2_server"`       // 如 https://1.2.3.4:7788
+	V2Email       string `yaml:"v2_email"`
+	V2Password    string `yaml:"v2_password"`
+	V2Node        string `yaml:"v2_node"`
+	V2InsecureTLS bool   `yaml:"v2_insecure_tls"`
 }
 
 // ForwardConfig 端口转发条目

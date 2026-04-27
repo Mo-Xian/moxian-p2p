@@ -60,6 +60,25 @@ func workDir() string {
 func configPath() string { return filepath.Join(workDir(), "client.yaml") }
 func logPath() string    { return filepath.Join(workDir(), "moxian.log") }
 
+func sanitizeHostname() string {
+	h, _ := os.Hostname()
+	h = strings.ReplaceAll(h, ".", "-")
+	h = strings.ReplaceAll(h, " ", "-")
+	if h == "" {
+		return "host"
+	}
+	return h
+}
+
+// 检查 client.yaml 是否含 v2 自动登录字段 决定要不要 onReady 后自动启动
+func hasV2AutoStart() bool {
+	fc, err := client.LoadFile(configPath())
+	if err != nil {
+		return false
+	}
+	return fc.V2Server != "" && fc.V2Email != "" && fc.V2Password != ""
+}
+
 func onReady() {
 	systray.SetIcon(makeIcon(0x80, 0x80, 0x80))
 	systray.SetTitle("moxian-p2p")
@@ -98,6 +117,12 @@ func onReady() {
 			}
 		}
 	}()
+
+	// v2 模式：client.yaml 配齐了登录信息 自动启动 用户不用再点"启动"
+	if hasV2AutoStart() {
+		log.Printf("[gui] v2 配置就绪 自动启动")
+		go doStart()
+	}
 }
 
 func onExit() {
@@ -129,6 +154,42 @@ func doStart() {
 	}
 	var cfg client.Config
 	fc.ApplyTo(&cfg)
+
+	// ---- v2 登录模式 ----
+	// 若 client.yaml 含 v2_server / v2_email / v2_password 则走 v2 登录流程
+	// 自动从服务器拉 P2P 配置（pass / virtual_ip / server_ws / udp / peers）
+	if fc.V2Server != "" && fc.V2Email != "" && fc.V2Password != "" {
+		log.Printf("[gui] v2 登录: %s as %s", fc.V2Server, fc.V2Email)
+		setState("登录中", 0xFF, 0xD4, 0x79)
+		ac := client.NewAuthClient(fc.V2Server, fc.V2InsecureTLS)
+		if _, err := ac.Login(fc.V2Email, fc.V2Password); err != nil {
+			log.Printf("[gui] v2 登录失败: %v", err)
+			setState("登录失败", 0xFF, 0x40, 0x40)
+			menuStart.Enable()
+			return
+		}
+		nodeID := fc.V2Node
+		if nodeID == "" {
+			nodeID = "win-" + sanitizeHostname()
+		}
+		v2cfg, err := ac.FetchConfig(nodeID)
+		if err != nil {
+			log.Printf("[gui] v2 拉配置失败: %v", err)
+			setState("拉配置失败", 0xFF, 0x40, 0x40)
+			menuStart.Enable()
+			return
+		}
+		// 用服务器返回值覆盖 cfg 中可能为空的字段
+		cfg.NodeID = v2cfg.NodeID
+		cfg.ServerURL = v2cfg.ServerWS
+		cfg.ServerUDP = v2cfg.ServerUDP
+		cfg.Passphrase = v2cfg.Pass
+		cfg.VirtualIP = v2cfg.VirtualIP
+		cfg.EnableTun = v2cfg.VirtualIP != ""
+		cfg.EnableMesh = v2cfg.Mesh
+		cfg.InsecureTLS = fc.V2InsecureTLS
+		log.Printf("[gui] v2 配置已拉取 node=%s vip=%s", cfg.NodeID, cfg.VirtualIP)
+	}
 
 	c, err := client.New(cfg)
 	if err != nil {
