@@ -58,11 +58,11 @@ function Get-YamlValue($path, $key) {
     return $val
 }
 
-$oldServer   = Get-YamlValue $YAML "v2_server"
-$oldEmail    = Get-YamlValue $YAML "v2_email"
-$oldPwd      = Get-YamlValue $YAML "v2_password"
-$oldNode     = Get-YamlValue $YAML "v2_node"
-$oldInsecure = Get-YamlValue $YAML "v2_insecure_tls"
+$oldServer   = Get-YamlValue $YAML "server"
+$oldEmail    = Get-YamlValue $YAML "email"
+$oldPwd      = Get-YamlValue $YAML "password"
+$oldNode     = Get-YamlValue $YAML "node"
+$oldInsecure = Get-YamlValue $YAML "insecure_tls"
 
 Write-Host ""
 if ($oldServer) {
@@ -114,17 +114,17 @@ if ($server.StartsWith("https://")) {
     }
 }
 
-# 写 client.yaml（仅 v2 登录字段 真实 P2P 配置由 GUI 启动时自动从服务器拉）
+# 写 client.yaml（仅登录凭据 真实 P2P 配置由 GUI 启动时自动从服务器拉）
 $yamlContent = @"
-# moxian-p2p 客户端配置（v2 唯一模式）
+# moxian-p2p 客户端配置
 # 启动时 moxian-gui 用下方凭据登录服务器 自动拉 pass/server/server_udp/virtual_ip
 # 改密码 / 迁服务器：编辑此文件后重启 GUI
 
-v2_server: "$server"
-v2_email: "$email"
-v2_password: "$pwdPlain"
-v2_node: "$node"
-v2_insecure_tls: $insecure
+server: "$server"
+email: "$email"
+password: "$pwdPlain"
+node: "$node"
+insecure_tls: $insecure
 "@
 Set-Content -Path $YAML -Value $yamlContent -Encoding UTF8
 icacls $YAML /inheritance:r /grant:r "$($env:USERNAME):F" /grant:r "Administrators:F" 2>&1 | Out-Null

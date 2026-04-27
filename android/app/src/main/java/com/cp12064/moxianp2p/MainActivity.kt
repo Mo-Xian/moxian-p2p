@@ -192,29 +192,19 @@ class MainActivity : AppCompatActivity() {
 
     // ---- 启停 VPN ----
     private fun startVpn() {
-        val nodeId = binding.etNodeId.text.toString().trim()
-        val server = binding.etServer.text.toString().trim()
-        val udp = binding.etUdp.text.toString().trim()
-        val pass = binding.etPass.text.toString().trim()
-        val vipField = binding.etVip.text.toString().trim()
-        if (nodeId.isEmpty() || server.isEmpty() || udp.isEmpty() || pass.isEmpty()) {
-            toast("node_id / server / udp / pass 必填")
+        if (!AuthSession.isLoggedIn()) {
+            toast("尚未登录")
             return
         }
-        if (vipField.isEmpty() ||
-            (vipField != "auto" && !vipField.matches(Regex("""^\d+\.\d+\.\d+\.\d+$"""))))  {
-            toast("virtual_ip 必须是 auto 或 x.x.x.x")
+        val nodeId = binding.etNodeId.text.toString().trim()
+        if (nodeId.isEmpty()) {
+            toast("node 名称不能为空")
             return
         }
         saveConfig()
         binding.tvLog.text = ""
-
-        if (vipField == "auto") {
-            // 先 probe 拿 server 分配的 IP
-            probeThenLaunch()
-        } else {
-            requestVpnThenLaunch(vipField)
-        }
+        // v2 模式 vip 永远来自 server 分配 先 probe
+        probeThenLaunch()
     }
 
     private fun probeThenLaunch() {
@@ -261,28 +251,21 @@ class MainActivity : AppCompatActivity() {
         stopService(Intent(this, MoxianVpnService::class.java))
     }
 
-    // 把 UI 字段拼成 Go 侧可解析的 yaml 字符串
+    // 拼 v2 yaml 给 Go 侧 mobile.NewClient 用
+    // 字段：server (auth base URL) + jwt (Kotlin 已登录的 token) + node + insecure_tls + 行为开关
+    // Go 侧用 jwt 直接调 /api/config 拉真实 P2P 配置（pass / server_ws / server_udp / vIP）
     private fun buildYaml(): String {
         val nodeId = binding.etNodeId.text.toString().trim()
-        val server = binding.etServer.text.toString().trim()
-        val udp = binding.etUdp.text.toString().trim()
-        val token = binding.etToken.text.toString().trim()
-        val pass = binding.etPass.text.toString().trim()
-        val vip = binding.etVip.text.toString().trim()
         val mesh = binding.cbMesh.isChecked
         val forwards = parseForwards(binding.etForwards.text.toString())
 
         val sb = StringBuilder()
-        sb.appendLine("node_id: \"$nodeId\"")
-        sb.appendLine("server: \"$server\"")
-        sb.appendLine("server_udp: \"$udp\"")
-        if (token.isNotEmpty()) sb.appendLine("token: \"$token\"")
-        sb.appendLine("pass: \"$pass\"")
-        sb.appendLine("virtual_ip: \"$vip\"")
+        sb.appendLine("server: \"${AuthSession.getServerUrl()}\"")
+        sb.appendLine("jwt: \"${AuthSession.getJwt()}\"")
+        sb.appendLine("node: \"$nodeId\"")
+        if (AuthSession.getInsecureTLS()) sb.appendLine("insecure_tls: true")
         sb.appendLine("mesh: $mesh")
         sb.appendLine("verbose: true")
-        // 从 AuthSession 带入自签证书标志 否则 Go 侧连 wss 会证书校验失败
-        if (AuthSession.getInsecureTLS()) sb.appendLine("insecure_tls: true")
         if (forwards.isNotEmpty()) {
             sb.appendLine("forwards:")
             for (f in forwards) {
@@ -401,11 +384,8 @@ class MainActivity : AppCompatActivity() {
         } else savedNodeId
         binding.etNodeId.setText(nodeId)
 
-        binding.etServer.setText(prefs.getString("server", ""))
-        binding.etUdp.setText(prefs.getString("udp", ""))
-        binding.etToken.setText(prefs.getString("token", ""))
-        binding.etPass.setText(prefs.getString("pass", ""))
-        binding.etVip.setText(prefs.getString("vip", "auto"))
+        // v2 模式 vip/server/udp/pass/token 全部由 server 下发 用户不感知 留空即可
+        binding.etVip.setText("auto")
         binding.etForwards.setText(prefs.getString("forwards", ""))
         binding.cbMesh.isChecked = prefs.getBoolean("mesh", true)
 
@@ -503,16 +483,12 @@ class MainActivity : AppCompatActivity() {
             pop.menu.add("👤 账号：${AuthSession.getUsername()}").isEnabled = false
             pop.menu.add("📡 查看 P2P 配置")
             pop.menu.add("🔄 检查更新")
-            pop.menu.add("📷 扫码导入")
-            pop.menu.add("📤 分享配置 QR")
             pop.menu.add("🔒 锁定")
             pop.menu.add("🚪 登出")
             pop.setOnMenuItemClickListener { m ->
                 when (m.title?.toString()) {
                     "📡 查看 P2P 配置" -> showP2PConfigDialog()
                     "🔄 检查更新" -> checkForUpdate(silent = false)
-                    "📷 扫码导入" -> startScanQr()
-                    "📤 分享配置 QR" -> showConfigQr()
                     "🔒 锁定" -> {
                         AuthSession.lock()
                         startActivity(Intent(this, UnlockActivity::class.java))
@@ -568,13 +544,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun saveConfig() {
+        // v2 模式：只持久化 用户可改的字段。pass/server/vip 都是 server 下发 不再本地存。
         prefs.edit()
             .putString("node_id", binding.etNodeId.text.toString().trim())
-            .putString("server", binding.etServer.text.toString().trim())
-            .putString("udp", binding.etUdp.text.toString().trim())
-            .putString("token", binding.etToken.text.toString().trim())
-            .putString("pass", binding.etPass.text.toString().trim())
-            .putString("vip", binding.etVip.text.toString().trim())
             .putString("forwards", binding.etForwards.text.toString())
             .putBoolean("mesh", binding.cbMesh.isChecked)
             .apply()

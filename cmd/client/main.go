@@ -140,18 +140,30 @@ func main() {
 		cfg.RateLimit = v
 	}
 
-	// 配置文件（CLI 字段空时填充）
+	// 配置文件（v2 模式：行为开关 + 凭据；可触发 v2 登录拉 P2P 配置）
+	// CLI flag 优先 yaml 仅在 CLI 未提供时生效
 	if *configFile != "" {
 		fc, err := client.LoadFile(*configFile)
 		if err != nil {
 			log.Fatalf("load config: %v", err)
 		}
 		fc.ApplyTo(&cfg)
+		// 若 yaml 含 server/email/password 且 CLI 没显式 -login 则自动触发
+		if *loginSrv == "" && fc.Server != "" && (fc.Email != "" || fc.JWT != "") {
+			fallback := *nodeID
+			if fallback == "" {
+				fallback = "cli-" + hostnameOrRandom()
+			}
+			if err := fc.FetchAndApply(&cfg, fallback); err != nil {
+				log.Fatalf("v2 yaml login: %v", err)
+			}
+			log.Printf("[v2-yaml] 已从 server 获取配置 node=%s vip=%s", cfg.NodeID, cfg.VirtualIP)
+		}
 	}
 
 	if cfg.NodeID == "" || cfg.ServerURL == "" || cfg.ServerUDP == "" {
 		flag.Usage()
-		log.Fatal("id/server/udp 必填（命令行或配置文件）")
+		log.Fatal("id/server/udp 必填（命令行 / -config / -login 任一提供）")
 	}
 	if !cfg.ListOnly && cfg.Passphrase == "" {
 		flag.Usage()

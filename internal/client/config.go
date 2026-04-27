@@ -1,6 +1,7 @@
 package client
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -9,13 +10,24 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// FileConfig 配置文件 schema（与 Config 一一对应 yaml tag 驱动）
+// FileConfig 客户端 yaml 文件 schema（v2 唯一模式）
+//
+// 字段分两类:
+//  1. 登录凭据（必填）—— 启动时去 server 登录拉真实 P2P 配置
+//  2. 行为开关（可选）—— 本地决定的运行参数 server 不下发
 type FileConfig struct {
-	NodeID      string   `yaml:"node_id"`
-	Token       string   `yaml:"token"`
-	ServerURL   string   `yaml:"server"`
-	ServerUDP   string   `yaml:"server_udp"`
-	Passphrase  string   `yaml:"pass"`
+	// ---- 登录凭据 ----
+	// Email + Password 完整登录 适用 CLI / GUI（用户在 yaml 写明文密码）
+	// JWT 直传 适用 Android（Kotlin 已登录 不持久化明文密码）
+	// 两种模式二选一 优先 JWT
+	Server      string `yaml:"server"`        // 如 https://1.2.3.4:7788
+	Email       string `yaml:"email"`
+	Password    string `yaml:"password"`
+	JWT         string `yaml:"jwt"`           // 已登录的 token 跳过 email+password 登录
+	Node        string `yaml:"node"`          // 节点名 留空则用 fallback
+	InsecureTLS bool   `yaml:"insecure_tls"`  // 自签证书跳过验证
+
+	// ---- 行为开关 ----
 	Tags        []string `yaml:"tags"`
 	Description string   `yaml:"description"`
 
@@ -23,7 +35,6 @@ type FileConfig struct {
 	AllowPeers   []string        `yaml:"allow_peers"`
 	Forwards     []ForwardConfig `yaml:"forwards"`
 
-	VirtualIP string `yaml:"virtual_ip"`
 	TunSubnet string `yaml:"tun_subnet"`
 	TunDev    string `yaml:"tun_dev"`
 
@@ -33,16 +44,8 @@ type FileConfig struct {
 	StatsAddr     string        `yaml:"stats_http"`
 	StatsInterval time.Duration `yaml:"stats_log"`
 
-	RateLimit   string `yaml:"rate_limit"` // 如 "10MB" / "1.5MB"
-	Verbose     bool   `yaml:"verbose"`
-	InsecureTLS bool   `yaml:"insecure_tls"` // 自签证书跳过验证
-
-	// v2 登录字段（GUI/CLI 用 启动时若有 V2Server 则跑 v2 登录流程）
-	V2Server      string `yaml:"v2_server"`       // 如 https://1.2.3.4:7788
-	V2Email       string `yaml:"v2_email"`
-	V2Password    string `yaml:"v2_password"`
-	V2Node        string `yaml:"v2_node"`
-	V2InsecureTLS bool   `yaml:"v2_insecure_tls"`
+	RateLimit string `yaml:"rate_limit"` // 如 "10MB" / "1.5MB"
+	Verbose   bool   `yaml:"verbose"`
 }
 
 // ForwardConfig 端口转发条目
@@ -65,23 +68,10 @@ func LoadFile(path string) (*FileConfig, error) {
 	return &fc, nil
 }
 
-// ApplyTo 将配置文件字段合并到 Config（CLI 优先 非空字段才覆盖）
+// ApplyTo 把行为开关合并进 Config（非空才覆盖 CLI 优先）
+// 不处理凭据字段（NodeID/ServerURL/ServerUDP/Passphrase/VirtualIP）
+// 凭据由 FetchAndApply 通过 v2 登录拉取
 func (fc *FileConfig) ApplyTo(cfg *Config) {
-	if cfg.NodeID == "" {
-		cfg.NodeID = fc.NodeID
-	}
-	if cfg.Token == "" {
-		cfg.Token = fc.Token
-	}
-	if cfg.ServerURL == "" {
-		cfg.ServerURL = fc.ServerURL
-	}
-	if cfg.ServerUDP == "" {
-		cfg.ServerUDP = fc.ServerUDP
-	}
-	if cfg.Passphrase == "" {
-		cfg.Passphrase = fc.Passphrase
-	}
 	if len(cfg.Tags) == 0 {
 		cfg.Tags = fc.Tags
 	}
@@ -98,10 +88,6 @@ func (fc *FileConfig) ApplyTo(cfg *Config) {
 		for _, f := range fc.Forwards {
 			cfg.Forwards = append(cfg.Forwards, ForwardRule{Local: f.Local, Peer: f.Peer, Target: f.Target})
 		}
-	}
-	if cfg.VirtualIP == "" {
-		cfg.VirtualIP = fc.VirtualIP
-		cfg.EnableTun = fc.VirtualIP != ""
 	}
 	if cfg.TunSubnet == "" || cfg.TunSubnet == "24" {
 		if fc.TunSubnet != "" {
@@ -131,6 +117,49 @@ func (fc *FileConfig) ApplyTo(cfg *Config) {
 	if !cfg.InsecureTLS {
 		cfg.InsecureTLS = fc.InsecureTLS
 	}
+}
+
+// FetchAndApply 用 fc 里的登录凭据调 server 拉 P2P 配置 填进 cfg
+// 优先 JWT 模式（fc.JWT 非空）次之 Email+Password 模式
+// node 取 fc.Node，否则 fallbackNode
+// 调用方应在 ApplyTo 之后调用（行为开关已就绪）
+func (fc *FileConfig) FetchAndApply(cfg *Config, fallbackNode string) error {
+	if fc.Server == "" {
+		return errors.New("server 必填")
+	}
+	ac := NewAuthClient(fc.Server, fc.InsecureTLS)
+	if fc.JWT != "" {
+		ac.JWT = fc.JWT
+	} else {
+		if fc.Email == "" || fc.Password == "" {
+			return errors.New("缺少凭据：jwt 或 (email + password) 至少提供一组")
+		}
+		if _, err := ac.Login(fc.Email, fc.Password); err != nil {
+			return fmt.Errorf("login: %w", err)
+		}
+	}
+	node := fc.Node
+	if node == "" {
+		node = fallbackNode
+	}
+	if node == "" {
+		return errors.New("node 必填（fallbackNode 也未提供）")
+	}
+	v2cfg, err := ac.FetchConfig(node)
+	if err != nil {
+		return fmt.Errorf("fetch config: %w", err)
+	}
+	cfg.NodeID = v2cfg.NodeID
+	cfg.ServerURL = v2cfg.ServerWS
+	cfg.ServerUDP = v2cfg.ServerUDP
+	cfg.Passphrase = v2cfg.Pass
+	cfg.VirtualIP = v2cfg.VirtualIP
+	cfg.EnableTun = v2cfg.VirtualIP != ""
+	if v2cfg.Mesh {
+		cfg.EnableMesh = true
+	}
+	cfg.InsecureTLS = fc.InsecureTLS
+	return nil
 }
 
 // parseSize 解析 "10MB" / "1.5KB" -> 字节数

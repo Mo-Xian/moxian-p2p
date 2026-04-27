@@ -6,6 +6,14 @@
 //   ...
 //   client.stop()
 //
+// yaml 仅含 v2 登录凭据 + 行为开关 mobile 内部自动登录拉 P2P 配置:
+//   server: "https://..."   # 必填
+//   email: "..."            # 必填
+//   password: "..."         # 必填
+//   node: "phone"           # 留空则用 fallback
+//   insecure_tls: true      # 自签证书
+//   mesh: true
+//
 // gomobile 限制:
 //   - 导出类型必须是命名 struct 或 interface
 //   - 方法参数/返回值必须是基本类型、[]byte、string、error、interface 或已导出 struct 指针
@@ -20,12 +28,13 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/cp12064/moxian-p2p/internal/client"
 	"github.com/cp12064/moxian-p2p/internal/debug"
 	"gopkg.in/yaml.v3"
 )
+
+const fallbackNode = "android-mobile"
 
 // LogSink Kotlin 实现此接口 接收 Go 侧所有日志
 // gomobile 会把 Go interface 转成 Java interface
@@ -43,25 +52,16 @@ type Client struct {
 	running atomic.Bool
 }
 
-// NewClient 从 yaml 字符串创建 client（不启动）
+// NewClient 从 v2 yaml 创建 client
+//   1. 解析 yaml（凭据 + 行为开关）
+//   2. 用凭据登录 server 拉 P2P 配置（pass / server_ws / server_udp / virtual_ip）
+//   3. Android 强制 EnableTun=true vip 缺省 "auto"
 // sink 可为 nil 则不重定向日志
 func NewClient(yamlConfig string, sink LogSink) (*Client, error) {
-	if strings.TrimSpace(yamlConfig) == "" {
-		return nil, errors.New("empty yaml config")
+	cfg, err := buildCfg(yamlConfig)
+	if err != nil {
+		return nil, err
 	}
-	var fc client.FileConfig
-	if err := yaml.Unmarshal([]byte(yamlConfig), &fc); err != nil {
-		return nil, fmt.Errorf("parse yaml: %w", err)
-	}
-	var cfg client.Config
-	fc.ApplyTo(&cfg)
-	// Android 语义固定:
-	cfg.EnableTun = true
-	if cfg.VirtualIP == "" {
-		cfg.VirtualIP = "auto"
-	}
-	// Android 默认开 debug 日志 方便排障
-	debug.Enable(true)
 
 	if sink != nil {
 		log.SetOutput(&sinkWriter{sink: sink})
@@ -118,39 +118,49 @@ func (c *Client) Stop() {
 // IsRunning 是否运行中
 func (c *Client) IsRunning() bool { return c.running.Load() }
 
-// Version 获取 Go 端版本字符串（方便 Kotlin 侧展示）
-func Version() string { return "0.6.0-mobile" }
+// VirtualIP 返回 server 分配的 vIP（NewClient 时已拉好）
+func (c *Client) VirtualIP() string { return c.cfg.VirtualIP }
 
-// PrepareVip 做一次短连接 STUN + WS 注册 返回 server 分配的 vIP
-// 用于 Android 建 VpnService.Builder 前拿到真实 vIP
-// 由于同一 node_id 在 server 持久化 后续 Start 注册会拿到同一 vIP
+// Version 获取 Go 端版本字符串（方便 Kotlin 侧展示）
+func Version() string { return "0.7.0-mobile" }
+
+// PrepareVip 用 yaml 凭据登录 server 拿到本节点 vIP
+// 用于 Android 建 VpnService.Builder 前拿到真实 vIP 决定网卡子网
 //
 // 阻塞调用 建议在 Kotlin 协程 IO 线程上跑
 func PrepareVip(yamlConfig string) (string, error) {
-	if strings.TrimSpace(yamlConfig) == "" {
-		return "", errors.New("empty yaml")
-	}
-	var fc client.FileConfig
-	if err := yaml.Unmarshal([]byte(yamlConfig), &fc); err != nil {
-		return "", fmt.Errorf("parse yaml: %w", err)
-	}
-	var cfg client.Config
-	fc.ApplyTo(&cfg)
-	// 仅做 probe 不启动其他功能
-	cfg.EnableTun = false
-	cfg.EnableMesh = false
-	cfg.Forwards = nil
-	if cfg.VirtualIP == "" {
-		cfg.VirtualIP = "auto"
-	}
-
-	tmp, err := client.New(cfg)
+	cfg, err := buildCfg(yamlConfig)
 	if err != nil {
 		return "", err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	return tmp.PeekVIP(ctx)
+	if cfg.VirtualIP == "" {
+		return "", errors.New("server 返回空 virtual_ip")
+	}
+	return cfg.VirtualIP, nil
+}
+
+// buildCfg 解析 yaml + 调 server 登录拉配置 返回完整 Config
+func buildCfg(yamlConfig string) (client.Config, error) {
+	var cfg client.Config
+	if strings.TrimSpace(yamlConfig) == "" {
+		return cfg, errors.New("empty yaml")
+	}
+	var fc client.FileConfig
+	if err := yaml.Unmarshal([]byte(yamlConfig), &fc); err != nil {
+		return cfg, fmt.Errorf("parse yaml: %w", err)
+	}
+	fc.ApplyTo(&cfg)
+	if err := fc.FetchAndApply(&cfg, fallbackNode); err != nil {
+		return cfg, fmt.Errorf("v2 login: %w", err)
+	}
+	// Android 语义固定
+	cfg.EnableTun = true
+	if cfg.VirtualIP == "" {
+		cfg.VirtualIP = "auto"
+	}
+	// Android 默认开 debug 日志 方便排障
+	debug.Enable(true)
+	return cfg, nil
 }
 
 // sinkWriter 把 log 包的输出转发给 Kotlin 的 LogSink
