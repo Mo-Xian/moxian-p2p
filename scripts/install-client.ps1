@@ -6,9 +6,9 @@
 # 自动完成：
 #   1. 下载最新 moxian-gui.exe + wintun.dll 到 C:\Program Files\moxian-p2p\
 #   2. 询问服务器 URL / 邮箱 / 密码 / 节点名
-#   3. 写 client.yaml（不带凭据 凭据通过 GUI 登录后保存）
-#   4. 创建桌面 + 开始菜单快捷方式（带管理员标记）
-#   5. 注册"Windows 登录后自启"任务
+#   3. 写 client.yaml（仅 v2 登录字段 GUI 启动时自动登录拉 P2P 配置）
+#   4. 创建桌面快捷方式（带管理员标记） 注册"Windows 登录后自启"任务
+#   5. 立即启动 moxian-gui
 #
 # 重新运行 = 升级 binary（凭据保留）
 
@@ -114,105 +114,12 @@ if ($server.StartsWith("https://")) {
     }
 }
 
-# ---- 立即调服务器 API 把 pass/server_ws/udp/vIP 烤进 yaml ----
-# 这样 moxian-gui 启动时直接用 v1 字段 不再每次登录
-
-Info "联系服务器拉取 P2P 配置..."
-
-# 自签证书时跳过验证（PowerShell 5 兼容写法）
-if ($insecure -eq "true") {
-    [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
-    [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
-}
-
-# 派生 pwdHash（PBKDF2-SHA256(password, email, 600k) → masterKey
-#               PBKDF2-SHA256(masterKey, password, 1) → pwdHash）
-function Get-PwdHash($password, $email, $iter) {
-    $pwdBytes = [System.Text.Encoding]::UTF8.GetBytes($password)
-    $emailLow = $email.ToLower().Trim()
-    $saltBytes = [System.Text.Encoding]::UTF8.GetBytes($emailLow)
-
-    $kdf1 = New-Object System.Security.Cryptography.Rfc2898DeriveBytes(
-        $pwdBytes, $saltBytes, $iter, [System.Security.Cryptography.HashAlgorithmName]::SHA256)
-    $masterKey = $kdf1.GetBytes(32)
-    $kdf1.Dispose()
-
-    $kdf2 = New-Object System.Security.Cryptography.Rfc2898DeriveBytes(
-        $masterKey, $pwdBytes, 1, [System.Security.Cryptography.HashAlgorithmName]::SHA256)
-    $pwdHash = $kdf2.GetBytes(32)
-    $kdf2.Dispose()
-
-    return [Convert]::ToBase64String($pwdHash)
-}
-
-$bakedServer = ""
-$bakedUDP = ""
-$bakedPass = ""
-$bakedVIP = "auto"
-$bakedNodeID = $node
-
-try {
-    # 1. prelogin 取 iterations
-    $pre = Invoke-RestMethod -Uri "$server/api/auth/prelogin" -Method POST `
-        -Body (@{ email = $email } | ConvertTo-Json) `
-        -ContentType "application/json" -ErrorAction Stop
-    $iter = $pre.kdf_iterations
-    if (-not $iter) { $iter = 600000 }
-
-    # 2. 派生 pwdHash + login 拿 JWT
-    Info "派生密码哈希（PBKDF2 $iter 迭代）..."
-    $pwdHash = Get-PwdHash $pwdPlain $email $iter
-
-    $login = Invoke-RestMethod -Uri "$server/api/auth/login" -Method POST `
-        -Body (@{ email = $email; password_hash = $pwdHash } | ConvertTo-Json) `
-        -ContentType "application/json" -ErrorAction Stop
-
-    if (-not $login.jwt) { throw "登录失败 服务器没返回 JWT" }
-    $jwt = $login.jwt
-    Ok "登录成功 user_id=$($login.user_id)"
-
-    # 3. 注册节点（已存在不会报错 服务器幂等）
-    try {
-        Invoke-RestMethod -Uri "$server/api/nodes" -Method POST `
-            -Headers @{ Authorization = "Bearer $jwt" } `
-            -Body (@{ node_id = $node } | ConvertTo-Json) `
-            -ContentType "application/json" -ErrorAction Stop | Out-Null
-    } catch {
-        # 已注册的节点会 409 忽略
-    }
-
-    # 4. 拉 config
-    $cfg = Invoke-RestMethod -Uri "$server/api/config?node=$node" -Method GET `
-        -Headers @{ Authorization = "Bearer $jwt" } -ErrorAction Stop
-
-    $bakedServer = $cfg.server_ws
-    $bakedUDP = $cfg.server_udp
-    $bakedPass = $cfg.pass
-    $bakedVIP = $cfg.virtual_ip
-    $bakedNodeID = $cfg.node_id
-
-    Ok "配置已烤入 yaml: vip=$bakedVIP server=$bakedServer"
-} catch {
-    Warn "联系服务器失败: $_"
-    Warn "yaml 仍保留 v2 字段 GUI 会在启动时再尝试登录"
-}
-
-# 写 client.yaml
+# 写 client.yaml（仅 v2 登录字段 真实 P2P 配置由 GUI 启动时自动从服务器拉）
 $yamlContent = @"
-# moxian-p2p 客户端配置
-# 由 install-client.ps1 v2 模式生成 含已烤入的服务器配置
-# 重跑脚本会保留旧值并允许覆盖
+# moxian-p2p 客户端配置（v2 唯一模式）
+# 启动时 moxian-gui 用下方凭据登录服务器 自动拉 pass/server/server_udp/virtual_ip
+# 改密码 / 迁服务器：编辑此文件后重启 GUI
 
-# ---- v1 字段（已由 install 时 API 调用填充 GUI 直用 不再 login）----
-node_id: "$bakedNodeID"
-server: "$bakedServer"
-server_udp: "$bakedUDP"
-pass: "$bakedPass"
-virtual_ip: "$bakedVIP"
-mesh: true
-verbose: false
-
-# ---- v2 兜底（pass 改了 / 服务器迁移时 GUI 会自动重新登录拉新配置）----
 v2_server: "$server"
 v2_email: "$email"
 v2_password: "$pwdPlain"

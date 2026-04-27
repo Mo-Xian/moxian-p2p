@@ -71,16 +71,11 @@ func sanitizeHostname() string {
 }
 
 // 检查 client.yaml 是否可以自动启动
-// 两种情况都触发自动启动：
-//   1. v1 字段已烘焙（server + pass + server_udp 齐全）—— 安装脚本已拉好配置 直接跑
-//   2. 仅有 v2 字段（v2_server + v2_email + v2_password）—— 启动时再去登录拉配置
+// 只看 v2 字段（v2_server + v2_email + v2_password）—— 启动时去登录拉配置
 func hasAutoStart() bool {
 	fc, err := client.LoadFile(configPath())
 	if err != nil {
 		return false
-	}
-	if fc.ServerURL != "" && fc.Passphrase != "" && fc.ServerUDP != "" {
-		return true
 	}
 	return fc.V2Server != "" && fc.V2Email != "" && fc.V2Password != ""
 }
@@ -161,44 +156,42 @@ func doStart() {
 	var cfg client.Config
 	fc.ApplyTo(&cfg)
 
-	// 启动策略（优先级）：
-	//   1. v1 字段齐全（安装脚本已烘焙）—— 直接用 yaml 内值 不联网拉
-	//   2. 仅 v2 字段 —— 走 v2 登录流程 从 server 拉 P2P 配置
-	v1Ready := cfg.ServerURL != "" && cfg.Passphrase != "" && cfg.ServerUDP != ""
-	if v1Ready {
-		log.Printf("[gui] 使用本地烘焙配置 node=%s vip=%s server=%s",
-			cfg.NodeID, cfg.VirtualIP, cfg.ServerURL)
-	} else if fc.V2Server != "" && fc.V2Email != "" && fc.V2Password != "" {
-		log.Printf("[gui] v2 登录: %s as %s", fc.V2Server, fc.V2Email)
-		setState("登录中", 0xFF, 0xD4, 0x79)
-		ac := client.NewAuthClient(fc.V2Server, fc.V2InsecureTLS)
-		if _, err := ac.Login(fc.V2Email, fc.V2Password); err != nil {
-			log.Printf("[gui] v2 登录失败: %v", err)
-			setState("登录失败", 0xFF, 0x40, 0x40)
-			menuStart.Enable()
-			return
-		}
-		nodeID := fc.V2Node
-		if nodeID == "" {
-			nodeID = "win-" + sanitizeHostname()
-		}
-		v2cfg, err := ac.FetchConfig(nodeID)
-		if err != nil {
-			log.Printf("[gui] v2 拉配置失败: %v", err)
-			setState("拉配置失败", 0xFF, 0x40, 0x40)
-			menuStart.Enable()
-			return
-		}
-		cfg.NodeID = v2cfg.NodeID
-		cfg.ServerURL = v2cfg.ServerWS
-		cfg.ServerUDP = v2cfg.ServerUDP
-		cfg.Passphrase = v2cfg.Pass
-		cfg.VirtualIP = v2cfg.VirtualIP
-		cfg.EnableTun = v2cfg.VirtualIP != ""
-		cfg.EnableMesh = v2cfg.Mesh
-		cfg.InsecureTLS = fc.V2InsecureTLS
-		log.Printf("[gui] v2 配置已拉取 node=%s vip=%s", cfg.NodeID, cfg.VirtualIP)
+	// 唯一启动路径：v2 登录 → 拉 P2P 配置
+	if fc.V2Server == "" || fc.V2Email == "" || fc.V2Password == "" {
+		log.Printf("[gui] 缺少登录信息（v2_server/v2_email/v2_password）请编辑配置")
+		setState("缺少登录信息", 0xFF, 0x40, 0x40)
+		menuStart.Enable()
+		return
 	}
+	log.Printf("[gui] 登录: %s as %s", fc.V2Server, fc.V2Email)
+	setState("登录中", 0xFF, 0xD4, 0x79)
+	ac := client.NewAuthClient(fc.V2Server, fc.V2InsecureTLS)
+	if _, err := ac.Login(fc.V2Email, fc.V2Password); err != nil {
+		log.Printf("[gui] 登录失败: %v", err)
+		setState("登录失败", 0xFF, 0x40, 0x40)
+		menuStart.Enable()
+		return
+	}
+	nodeID := fc.V2Node
+	if nodeID == "" {
+		nodeID = "win-" + sanitizeHostname()
+	}
+	v2cfg, err := ac.FetchConfig(nodeID)
+	if err != nil {
+		log.Printf("[gui] 拉配置失败: %v", err)
+		setState("拉配置失败", 0xFF, 0x40, 0x40)
+		menuStart.Enable()
+		return
+	}
+	cfg.NodeID = v2cfg.NodeID
+	cfg.ServerURL = v2cfg.ServerWS
+	cfg.ServerUDP = v2cfg.ServerUDP
+	cfg.Passphrase = v2cfg.Pass
+	cfg.VirtualIP = v2cfg.VirtualIP
+	cfg.EnableTun = v2cfg.VirtualIP != ""
+	cfg.EnableMesh = v2cfg.Mesh
+	cfg.InsecureTLS = fc.V2InsecureTLS
+	log.Printf("[gui] 配置已拉取 node=%s vip=%s", cfg.NodeID, cfg.VirtualIP)
 
 	c, err := client.New(cfg)
 	if err != nil {
