@@ -85,23 +85,16 @@ if (-not $email) {
     if ($oldEmail) { $email = $oldEmail } else { Err "邮箱必填" }
 }
 
-# 主密码
+# 主密码（明文显示旧值 + 明文输入新值 让用户能看到）
+# 安全考虑：脚本本来就是本地交互运行 yaml 也是明文存储 显示无新增泄漏面
 $pwdPlain = ""
 if ($oldPwd) {
-    $pwdLen = $oldPwd.Length
-    $hint = "主密码 [回车保留旧值 已设置 $pwdLen 位]"
-    Write-Host -NoNewline "$hint`: "
-    $pwd = Read-Host -AsSecureString
-    $pwdPlain = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
-        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($pwd)
-    )
-    if (-not $pwdPlain) { $pwdPlain = $oldPwd }
+    $pwdInput = Read-Host "主密码 [默认: $oldPwd]"
+    if (-not $pwdInput) { $pwdPlain = $oldPwd } else { $pwdPlain = $pwdInput }
 } else {
-    $pwd = Read-Host "主密码（输入时不显示）" -AsSecureString
-    $pwdPlain = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
-        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($pwd)
-    )
-    if (-not $pwdPlain) { Err "密码必填" }
+    $pwdInput = Read-Host "主密码"
+    if (-not $pwdInput) { Err "密码必填" }
+    $pwdPlain = $pwdInput
 }
 
 # 节点名

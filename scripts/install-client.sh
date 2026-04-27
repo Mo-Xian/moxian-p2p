@@ -88,12 +88,13 @@ else
 fi
 [[ -n "$EMAIL" ]] || err "邮箱必填"
 
-# 主密码
+# 主密码（明文显示旧值 + 明文输入新值）
+# 脚本本地交互运行 client.env 本身明文存储 显示无新增泄漏面
 if [[ -n "$OLD_PWD" ]]; then
-  read -rsp "主密码 [回车保留旧值 已设置 ${#OLD_PWD} 位]: " PWD; echo
+  read -rp "主密码 [默认 $OLD_PWD]: " PWD
   PWD="${PWD:-$OLD_PWD}"
 else
-  read -rsp "主密码: " PWD; echo
+  read -rp "主密码: " PWD
 fi
 [[ -n "$PWD" ]] || err "密码必填"
 
