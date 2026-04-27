@@ -169,25 +169,27 @@ jobs:
       # 需要在 repo settings → Secrets and variables → Actions 配两个 secret：
       #   MOXIAN_RELEASE_URL    例 https://your-vps.com:7788
       #   MOXIAN_RELEASE_TOKEN  与服务端 -release-ci-token 一致
-      # 没配 secret 此步会跳过 不影响 GitHub release
+      # 没配 secret 此步会跳过（exit 0）不会让 job 失败
       - name: Upload APK to VPS
-        if: ${{ env.MOXIAN_RELEASE_URL != '' && env.MOXIAN_RELEASE_TOKEN != '' }}
         env:
           MOXIAN_RELEASE_URL: ${{ secrets.MOXIAN_RELEASE_URL }}
           MOXIAN_RELEASE_TOKEN: ${{ secrets.MOXIAN_RELEASE_TOKEN }}
           TAG: ${{ github.event.inputs.tag || github.ref_name }}
         run: |
-          set -e
+          if [ -z "$MOXIAN_RELEASE_URL" ] || [ -z "$MOXIAN_RELEASE_TOKEN" ]; then
+            echo "::notice::secrets 未配置（MOXIAN_RELEASE_URL/MOXIAN_RELEASE_TOKEN）跳过 VPS 推送"
+            exit 0
+          fi
           echo "[upload] $MOXIAN_RELEASE_URL/api/release/ci-upload tag=$TAG"
           # -k 容忍自签证书
-          HTTP_CODE=$(curl -sk -o /tmp/upload.json -w "%{http_code}" \
+          HTTP_CODE=$(curl -sk -o /tmp/upload.json -w "%{http_code}" --max-time 300 \
             -H "X-Release-Token: $MOXIAN_RELEASE_TOKEN" \
             -F "tag=$TAG" \
             -F "notes=自动从 GitHub Actions 推送" \
             -F "file=@bin/moxian-p2p-debug.apk" \
-            "$MOXIAN_RELEASE_URL/api/release/ci-upload")
+            "$MOXIAN_RELEASE_URL/api/release/ci-upload" || echo "000")
           echo "[upload] HTTP $HTTP_CODE"
-          cat /tmp/upload.json
+          cat /tmp/upload.json 2>/dev/null || true
           if [ "$HTTP_CODE" != "200" ]; then
             echo "::warning::APK 推送 VPS 失败 HTTP $HTTP_CODE — GitHub release 仍正常"
             exit 0
