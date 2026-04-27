@@ -49,45 +49,66 @@ object AppUpdater {
         return@withContext checkFromGitHub(current)
     }
 
-    private fun checkFromServer(serverBase: String, current: String): Release? = try {
-        val url = serverBase.trimEnd('/') + "/api/release/latest"
-        val conn = openConn(url)
-        conn.connectTimeout = 4_000
-        conn.readTimeout = 6_000
-        if (conn.responseCode != 200) return null
-        val body = conn.inputStream.bufferedReader().use { it.readText() }
-        val obj = JSONObject(body)
-        val tag = obj.optString("tag").removePrefix("v")
-        if (tag.isEmpty() || tag == current) return null
-        if (!isNewer(tag, current)) return null
-        val apkPath = obj.optString("apk_url")
-        if (apkPath.isEmpty()) return null
-        val apkUrl = if (apkPath.startsWith("http")) apkPath else serverBase.trimEnd('/') + apkPath
-        Release(tag = "v$tag", apkUrl = apkUrl, notes = obj.optString("notes"))
-    } catch (_: Exception) { null }
-
-    private fun checkFromGitHub(current: String): Release? = try {
-        val conn = URL(GH_API).openConnection() as HttpURLConnection
-        conn.setRequestProperty("Accept", "application/vnd.github+json")
-        conn.connectTimeout = 5_000
-        conn.readTimeout = 5_000
-        val body = conn.inputStream.bufferedReader().use { it.readText() }
-        val obj = JSONObject(body)
-        val tag = obj.optString("tag_name").removePrefix("v")
-        if (tag.isEmpty() || tag == current) return null
-        if (!isNewer(tag, current)) return null
-        val assets = obj.optJSONArray("assets") ?: return null
-        var apkUrl = ""
-        for (i in 0 until assets.length()) {
-            val a = assets.getJSONObject(i)
-            if (a.optString("name").endsWith(".apk")) {
-                apkUrl = a.optString("browser_download_url")
-                break
+    private fun checkFromServer(serverBase: String, current: String): Release? {
+        return try {
+            val url = serverBase.trimEnd('/') + "/api/release/latest"
+            val conn = openConn(url)
+            conn.connectTimeout = 4_000
+            conn.readTimeout = 6_000
+            if (conn.responseCode != 200) {
+                null
+            } else {
+                val body = conn.inputStream.bufferedReader().use { it.readText() }
+                val obj = JSONObject(body)
+                val tag = obj.optString("tag").removePrefix("v")
+                val apkPath = obj.optString("apk_url")
+                when {
+                    tag.isEmpty() -> null
+                    tag == current -> null
+                    !isNewer(tag, current) -> null
+                    apkPath.isEmpty() -> null
+                    else -> {
+                        val apkUrl = if (apkPath.startsWith("http")) apkPath
+                                     else serverBase.trimEnd('/') + apkPath
+                        Release(tag = "v$tag", apkUrl = apkUrl, notes = obj.optString("notes"))
+                    }
+                }
             }
+        } catch (e: Exception) {
+            null
         }
-        if (apkUrl.isEmpty()) return null
-        Release(tag = "v$tag", apkUrl = apkUrl, notes = obj.optString("body"))
-    } catch (_: Exception) { null }
+    }
+
+    private fun checkFromGitHub(current: String): Release? {
+        return try {
+            val conn = URL(GH_API).openConnection() as HttpURLConnection
+            conn.setRequestProperty("Accept", "application/vnd.github+json")
+            conn.connectTimeout = 5_000
+            conn.readTimeout = 5_000
+            val body = conn.inputStream.bufferedReader().use { it.readText() }
+            val obj = JSONObject(body)
+            val tag = obj.optString("tag_name").removePrefix("v")
+            if (tag.isEmpty() || tag == current || !isNewer(tag, current)) {
+                null
+            } else {
+                val assets = obj.optJSONArray("assets")
+                var apkUrl = ""
+                if (assets != null) {
+                    for (i in 0 until assets.length()) {
+                        val a = assets.getJSONObject(i)
+                        if (a.optString("name").endsWith(".apk")) {
+                            apkUrl = a.optString("browser_download_url")
+                            break
+                        }
+                    }
+                }
+                if (apkUrl.isEmpty()) null
+                else Release(tag = "v$tag", apkUrl = apkUrl, notes = obj.optString("body"))
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
 
     // 自签证书下也能开 — 复用 AuthSession 的 insecure 标志
     private fun openConn(url: String): HttpURLConnection {
