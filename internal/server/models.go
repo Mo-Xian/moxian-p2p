@@ -222,6 +222,32 @@ func GetMeshPassphrase(db *sql.DB, userID int64) (string, error) {
 	return p, err
 }
 
+// ResetUserPassword 管理员重置用户主密码
+// 因为 vault 用旧 masterKey 加密 重置后 vault 必须清空 用户重登后从空 vault 开始
+// P2P mesh passphrase 保留 不影响 P2P 功能
+func ResetUserPassword(db *sql.DB, userID int64, clientPwdHash string, kdfIter int) error {
+	pwdHashed, err := HashPassword(clientPwdHash)
+	if err != nil {
+		return err
+	}
+	res, err := db.Exec(`
+		UPDATE users
+		SET password_hash = ?, kdf_iterations = ?,
+		    encrypted_vault = NULL, vault_version = 0,
+		    updated_at = ?
+		WHERE id = ?`,
+		pwdHashed, kdfIter, time.Now().Unix(), userID,
+	)
+	if err != nil {
+		return err
+	}
+	rows, _ := res.RowsAffected()
+	if rows == 0 {
+		return errors.New("用户不存在")
+	}
+	return nil
+}
+
 // ---- Invite CRUD ----
 
 // CreateInvite 管理员生成邀请码 有效期默认 24 小时

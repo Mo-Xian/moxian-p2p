@@ -205,13 +205,50 @@ async function refreshUsers() {
     const list = document.getElementById("users-list");
     if (!r.users || r.users.length === 0) { list.innerHTML = '<div class="muted">无用户</div>'; return; }
     list.innerHTML = `<table>
-      <thead><tr><th>邮箱</th><th>用户名</th><th>角色</th></tr></thead>
+      <thead><tr><th>邮箱</th><th>用户名</th><th>角色</th><th>操作</th></tr></thead>
       <tbody>${r.users.map(u =>
         `<tr><td>${escapeHtml(u.email)}</td><td>${escapeHtml(u.username)}</td>
-         <td>${u.is_admin ? "🛡️ 管理员" : "用户"}</td></tr>`
+         <td>${u.is_admin ? "🛡️ 管理员" : "用户"}</td>
+         <td><button class="reset-pwd-btn" data-uid="${u.id}" data-email="${escapeHtml(u.email)}">🔑 重置密码</button></td></tr>`
       ).join("")}</tbody>
     </table>`;
+    document.querySelectorAll(".reset-pwd-btn").forEach(btn => {
+      btn.onclick = () => resetPasswordFlow(parseInt(btn.dataset.uid), btn.dataset.email);
+    });
   } catch (e) { console.error(e); }
+}
+
+// 管理员重置用户主密码
+// 浏览器端用 PBKDF2 派生新 pwdHash 发给 server
+// vault 会被清空（旧 masterKey 已失效）告知用户后再执行
+async function resetPasswordFlow(userId, email) {
+  const pwd = prompt(
+    `⚠️ 重置 ${email} 的主密码\n\n` +
+    `重置后影响:\n` +
+    `  · 该用户的 vault（已存的 NAS 服务凭据）会被清空 需重新填\n` +
+    `  · P2P 节点配置保留 不影响互连\n` +
+    `  · 用户需用新密码重新登录\n\n` +
+    `请输入新密码（至少 6 位）:`
+  );
+  if (!pwd) return;
+  if (pwd.length < 6) { alert("密码至少 6 位"); return; }
+  const confirm2 = prompt("再输一次确认:");
+  if (confirm2 !== pwd) { alert("两次输入不一致 已取消"); return; }
+  try {
+    const iterations = 600000;
+    const { hashB64 } = await deriveMasterAndHash(pwd, email, iterations);
+    await api("/api/admin/users/reset-password", {
+      method: "POST",
+      body: JSON.stringify({
+        user_id: userId,
+        password_hash: hashB64,
+        kdf_iterations: iterations,
+      }),
+    });
+    alert(`✅ ${email} 的密码已重置 vault 已清空 用户用新密码重新登录即可`);
+  } catch (e) {
+    alert("重置失败: " + e.message);
+  }
 }
 
 // ---- Logout ----

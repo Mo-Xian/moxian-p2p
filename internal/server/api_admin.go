@@ -16,6 +16,7 @@ type AdminAPI struct {
 func (a *AdminAPI) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/admin/invites", a.JWT.AuthMiddleware(AdminOnly(a.handleInvites)))
 	mux.HandleFunc("/api/admin/users", a.JWT.AuthMiddleware(AdminOnly(a.handleUsers)))
+	mux.HandleFunc("/api/admin/users/reset-password", a.JWT.AuthMiddleware(AdminOnly(a.handleResetPassword)))
 }
 
 // GET /api/admin/invites → 列表
@@ -66,6 +67,41 @@ func (a *AdminAPI) handleInvites(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeErr(w, 405, "method not allowed")
 	}
+}
+
+// POST /api/admin/users/reset-password
+//
+//	{user_id, password_hash, kdf_iterations}
+//
+// 重置用户主密码 vault 清空（因为旧 masterKey 已失效）
+// P2P mesh passphrase 保留 不影响节点连接
+func (a *AdminAPI) handleResetPassword(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		writeErr(w, 405, "method not allowed")
+		return
+	}
+	var body struct {
+		UserID        int64  `json:"user_id"`
+		PasswordHash  string `json:"password_hash"`
+		KDFIterations int    `json:"kdf_iterations"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeErr(w, 400, "bad json")
+		return
+	}
+	if body.UserID == 0 || body.PasswordHash == "" || body.KDFIterations <= 0 {
+		writeErr(w, 400, "user_id / password_hash / kdf_iterations 必填")
+		return
+	}
+	if err := ValidatePasswordHashFormat(body.PasswordHash); err != nil {
+		writeErr(w, 400, err.Error())
+		return
+	}
+	if err := ResetUserPassword(a.DB, body.UserID, body.PasswordHash, body.KDFIterations); err != nil {
+		writeErr(w, 500, err.Error())
+		return
+	}
+	writeJSON(w, 200, map[string]any{"ok": true})
 }
 
 // GET /api/admin/users → 用户列表
