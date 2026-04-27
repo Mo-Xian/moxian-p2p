@@ -1,17 +1,48 @@
 # moxian-p2p 配置示例
 
+## ⭐ v2 推荐方式：一键安装脚本（不用手填配置）
+
+```bash
+# VPS 服务端
+curl -fsSL https://raw.githubusercontent.com/Mo-Xian/moxian-p2p/main/scripts/install-server.sh | sudo bash
+
+# Linux 客户端（NAS / 树莓派）
+curl -fsSL https://raw.githubusercontent.com/Mo-Xian/moxian-p2p/main/scripts/install-client.sh | sudo bash
+
+# Windows 客户端（管理员 PowerShell）
+irm https://raw.githubusercontent.com/Mo-Xian/moxian-p2p/main/scripts/install-client.ps1 | iex
+
+# Android: 装 APK 即可 https://github.com/Mo-Xian/moxian-p2p/releases/latest
+```
+
+详见 [`scripts/README.md`](../scripts/README.md)。
+
 ## 文件一览
 
-| 文件 | 用途 | 部署目标 |
-|------|------|---------|
-| `server.yaml` | 信令/中继 server 配置 | VPS `/etc/moxian/server.yaml` |
-| `moxian-server.service` | VPS server systemd unit | VPS `/etc/systemd/system/` |
-| `client.yaml` | 任意 client 节点配置（通用模板） | 各 client 机器 `/etc/moxian/client.yaml` 或 `bin/client.yaml` |
-| `moxian-client.service` | Linux client systemd unit | Linux 节点 `/etc/systemd/system/` |
-| [`self-hosted-nas.md`](self-hosted-nas.md) | 端到端自建 NAS 部署指南（Debian + Immich + Jellyfin + moxian-p2p 远程接入） | 文档 |
-| [`nas-stack/`](nas-stack/) | 自建 NAS 一键栈（Linux bootstrap.sh / Windows bootstrap.ps1 + docker-compose.yml + moxian 模板 30 分钟部署）| NAS 主机 |
+### v2（推荐）
 
-**VPS 只部署 server 相关文件，不部署 client**。client 跑在你想互通的各台机器上（家里 PC、办公室电脑、NAS、树莓派、手机等）。
+| 文件 | 用途 |
+|------|------|
+| [`v2/README.md`](v2/README.md) | v2 配置文件位置、修改方式、卸载步骤 |
+| [`v2/server.systemd`](v2/server.systemd) | 服务端 systemd unit 参考 |
+| [`v2/client.env.example`](v2/client.env.example) | Linux 客户端凭据文件参考 |
+| [`v2/client.systemd`](v2/client.systemd) | Linux 客户端 systemd unit 参考 |
+
+### NAS 应用栈
+
+| 文件 | 用途 |
+|------|------|
+| [`self-hosted-nas.md`](self-hosted-nas.md) | 端到端自建 NAS 部署指南（Debian + Immich + Jellyfin + moxian-p2p）|
+| [`nas-stack/`](nas-stack/) | 自建 NAS 一键 Docker 栈（含 bootstrap.sh / bootstrap.ps1）|
+
+### v1 LEGACY（不推荐 仅参考）
+
+| 文件 | 状态 |
+|------|------|
+| `server.yaml` | ⚠️ v1 服务端 YAML（v2 不再读 YAML）|
+| `client.yaml` | ⚠️ v1 客户端 YAML（v2 客户端从服务器拉配置）|
+| `moxian-server.service` | ⚠️ v1 systemd unit（v2 用 install 脚本生成的）|
+| `moxian-client.service` | ⚠️ v1 |
 
 ## 典型架构
 

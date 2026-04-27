@@ -1,0 +1,41 @@
+# moxian-p2p v2 server systemd unit 示例
+# 实际使用：跑 scripts/install-server.sh 自动生成 不用手抄
+# 此文件用于参考 + 想自定义启动参数时改
+
+[Unit]
+Description=moxian-p2p v2 signaling + auth server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+
+# 关键参数（install-server.sh 会自动填好）：
+#   -host        VPS 公网 IP 或域名（客户端用此连接）
+#   -ws/-udp     监听端口
+#   -tls-cert    证书路径（自签或 Let's Encrypt）
+#   -tls-key     私钥路径
+#   -db          SQLite 数据库（保留所有用户/邀请码/vault）
+#   -jwt-secret  JWT 签名密钥（hex 32 字节 重启后所有 token 失效）
+#
+# 可选：
+#   -udp2        第二 STUN 端口（NAT 类型检测）
+#   -stun-extra  额外 STUN 端口列表 例 :7791,:7792
+#   -relay-limit 中继 per-session 限速 例 10MB
+#   -jwt-ttl     token 有效期 默认 24h
+
+ExecStart=/bin/sh -c '/usr/local/bin/moxian-server \
+  -host YOUR_PUBLIC_IP \
+  -ws :7788 -udp :7789 -udp2 :7790 \
+  -tls-cert /etc/moxian/tls/cert.pem \
+  -tls-key  /etc/moxian/tls/key.pem \
+  -db /var/lib/moxian/moxian.db \
+  -jwt-secret "$(cat /etc/moxian/jwt.secret)"'
+
+Restart=always
+RestartSec=5
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

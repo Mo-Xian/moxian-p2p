@@ -1,0 +1,27 @@
+# moxian-p2p v2 client systemd unit 示例
+# 实际使用：跑 scripts/install-client.sh 自动生成
+
+[Unit]
+Description=moxian-p2p v2 client
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/moxian/client.env
+ExecStart=/bin/sh -c '/usr/local/bin/moxian-client \
+  -login "$MOXIAN_SERVER" \
+  -email "$MOXIAN_EMAIL" \
+  -id "$MOXIAN_NODE" \
+  $MOXIAN_INSECURE \
+  -mesh'
+Restart=always
+RestartSec=10
+LimitNOFILE=65536
+
+# TUN 设备需要 NET_ADMIN
+AmbientCapabilities=CAP_NET_ADMIN
+CapabilityBoundingSet=CAP_NET_ADMIN
+
+[Install]
+WantedBy=multi-user.target

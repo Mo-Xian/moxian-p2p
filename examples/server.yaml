@@ -1,4 +1,9 @@
-# === moxian-p2p 服务器配置 ===
+# ⚠️ LEGACY (v1) - v2 不再用 YAML ⚠️
+# v2 部署一行命令：
+#   curl -fsSL https://raw.githubusercontent.com/Mo-Xian/moxian-p2p/main/scripts/install-server.sh | sudo bash
+# 此文件仅作历史参考 完整 v2 配置位置见 examples/v2/README.md
+#
+# === moxian-p2p v1 服务器配置 ===
 # 目标位置: /etc/moxian/server.yaml
 # 启动: moxian-server -config /etc/moxian/server.yaml
 

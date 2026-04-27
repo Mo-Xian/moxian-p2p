@@ -1,5 +1,8 @@
-# === moxian-p2p 客户端配置（通用模板）===
-# 适用于 Linux / Windows / macOS 任意客户端节点（VPS 只跑 server 不要这个文件）
+# ⚠️ LEGACY (v1) - v2 不用 YAML 配置 ⚠️
+# 此文件仅作历史参考 v2 部署用 scripts/install-client.sh
+# v2 客户端只需输入：服务器 URL + 邮箱 + 密码 + 节点名（其他自动）
+#
+# === moxian-p2p v1 客户端配置 ===
 # 启动: moxian-client -config client.yaml
 
 # ---- 必填 ----
