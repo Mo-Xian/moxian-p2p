@@ -100,12 +100,9 @@ class MainActivity : AppCompatActivity() {
                 return
             }
         }
-        // 后台超时自动锁（仅清 masterKey JWT 仍有效）
-        // P2P 主功能用 JWT 即可 不再强制 unlock；
-        // vault（NAS 服务凭据）按需在打开服务时再要求解锁
-        if (lastPauseAt > 0 && System.currentTimeMillis() - lastPauseAt > AUTO_LOCK_MS) {
-            AuthSession.lock()
-        }
+        // 默认行为 = 持久化 masterKey 永久免输密码
+        // 用户想锁定 → 菜单 "🔒 锁定" 主动触发（同时清持久化）
+        // 用户想登出 → 菜单 "🚪 登出"
 
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
@@ -487,9 +484,11 @@ class MainActivity : AppCompatActivity() {
                     "📡 查看 P2P 配置" -> showP2PConfigDialog()
                     "🔄 检查更新" -> checkForUpdate(silent = false)
                     "🔒 锁定" -> {
+                        // 主动锁定 = 清持久化 masterKey + 清内存 ek/mk
+                        // 下次进 NAS 服务才会要求重输密码
+                        AuthStore.prefs(this).edit().remove("session_master_key").apply()
                         AuthSession.lock()
-                        startActivity(Intent(this, UnlockActivity::class.java))
-                        finish()
+                        Toast.makeText(this, "已锁定 vault 下次访问 NAS 服务时需输主密码", Toast.LENGTH_SHORT).show()
                     }
                     "🚪 登出" -> {
                         AuthSession.logout(this)
@@ -686,11 +685,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        // 后台超时仅锁 vault 不强制跳解锁页
-        // P2P 主功能继续可用 进 NAS 服务时再按需弹解锁
-        if (lastPauseAt > 0 && System.currentTimeMillis() - lastPauseAt > AUTO_LOCK_MS) {
-            AuthSession.lock()
-        }
+        // 不再做超时自动锁 由用户主动选择菜单"🔒 锁定"
     }
 
     override fun onStart() {

@@ -42,13 +42,28 @@ object VaultAuthHelper {
             Toast.makeText(ctx, "请先解锁 Vault（回主界面 → 解锁）", Toast.LENGTH_LONG).show()
             return
         }
-        val vault = AuthSession.getVault()
-        val existing = vault?.get(serviceId)
-        if (existing != null && existing.username.isNotEmpty()) {
-            onCreds(existing.username, existing.password)
-            return
+        // 自动从 server 拉一次 vault（restoreFromDisk 时仅恢复了 ek/mk 内容是延迟加载）
+        owner.lifecycleScope.launch {
+            withContext(Dispatchers.IO) { AuthSession.lazyFetchVault(ctx) }
+            val vault = AuthSession.getVault()
+            val existing = vault?.get(serviceId)
+            if (existing != null && existing.username.isNotEmpty()) {
+                onCreds(existing.username, existing.password)
+                return@launch
+            }
+            showCollectDialog(ctx, owner, serviceId, title, hintUser, vault, onCreds)
         }
-        // 弹窗收集
+    }
+
+    private fun showCollectDialog(
+        ctx: Context,
+        owner: LifecycleOwner,
+        serviceId: String,
+        title: String,
+        hintUser: String,
+        vault: VaultData?,
+        onCreds: (user: String, pass: String) -> Unit,
+    ) {
         val layout = LinearLayout(ctx).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(48, 24, 48, 24)

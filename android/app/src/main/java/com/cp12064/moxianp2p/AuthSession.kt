@@ -108,7 +108,10 @@ object AuthSession {
             if (plain != null) VaultData.fromJson(plain) else VaultData()
         } else VaultData()
 
-        // 持久化 JWT / server / username 到加密 prefs（但不存 masterKey）
+        // 持久化 JWT / server / username + masterKey（让 APP 重启免输密码）
+        // masterKey 落盘看似破坏零知识 但 AuthStore 底层 = EncryptedSharedPreferences
+        // + Android Keystore（硬件密钥 TEE 保护） 安全性等价系统级密钥
+        // 卸载 APP / 备份导出 / root 都拿不到原文 对家用 NAS 凭据已足够
         AuthStore.prefs(ctx).edit()
             .putString("session_server", serverUrl)
             .putString("session_jwt", jwt)
@@ -119,10 +122,12 @@ object AuthSession {
             .putInt("session_kdf", kdfIter)
             .putLong("session_vault_ver", vaultVersion)
             .putBoolean("session_insecure_tls", insecureTLS)
+            .putString("session_master_key",
+                android.util.Base64.encodeToString(masterKey, android.util.Base64.NO_WRAP))
             .apply()
     }
 
-    /** 进程启动时 尝试恢复上次的 JWT 会话（但 masterKey 没了 需再输主密码解锁）*/
+    /** 进程启动时 恢复 JWT + masterKey 实现完全免输密码 */
     fun restoreFromDisk(ctx: Context): Boolean {
         val p = AuthStore.prefs(ctx)
         val j = p.getString("session_jwt", null) ?: return false
@@ -136,7 +141,43 @@ object AuthSession {
         kdfIterations = p.getInt("session_kdf", 600_000)
         vaultVersion = p.getLong("session_vault_ver", 0)
         insecureTLS = p.getBoolean("session_insecure_tls", false)
+        // 恢复 masterKey 派生 enc/mac key（硬件密钥保护下安全）
+        // vault 内容仍是加密 blob 由 server 端存 用 ek/mk 解
+        // 这里不联网拉 vault（restoreFromDisk 必须同步快返）首次访问 vault 时再 lazyFetchVault
+        val mkB64 = p.getString("session_master_key", null)
+        if (!mkB64.isNullOrBlank()) {
+            try {
+                val master = android.util.Base64.decode(mkB64, android.util.Base64.NO_WRAP)
+                val (ek, mk) = BwCrypto.stretchMasterKey(master)
+                encKey = ek
+                macKey = mk
+                // vault 等首次需要时再拉
+                decryptedVault = VaultData()
+            } catch (_: Exception) {
+                // masterKey 解码失败 fallback 到要求输密码
+            }
+        }
         return true
+    }
+
+    /** 已恢复 ek/mk 但 vault 内容还没拉 第一次访问 vault 时调一次同步过来 */
+    fun lazyFetchVault(ctx: Context): Boolean {
+        val ek = encKey ?: return false
+        val mk = macKey ?: return false
+        if (decryptedVault?.entries?.isNotEmpty() == true) return true
+        return try {
+            val resp = httpGet(ctx, "/api/vault") ?: return false
+            val vaultJson = JSONObject(resp)
+            val encryptedVault = vaultJson.optString("encrypted_vault")
+            val ver = vaultJson.optLong("version")
+            decryptedVault = if (encryptedVault.isNotEmpty()) {
+                val plain = BwCrypto.decryptEncStringToStr(encryptedVault, ek, mk)
+                if (plain == null) return false
+                VaultData.fromJson(plain)
+            } else VaultData()
+            vaultVersion = ver
+            true
+        } catch (_: Exception) { false }
     }
 
     /** 用主密码重新解锁（JWT 仍有效时用 其他服务菜单等用到 vault 时先解锁）*/
@@ -171,7 +212,7 @@ object AuthSession {
         decryptedVault = null
     }
 
-    /** 完全登出 清所有 JWT / 持久化 */
+    /** 完全登出 清所有 JWT / 持久化（含 masterKey）*/
     fun logout(ctx: Context) {
         lock()
         jwt = ""; email = ""; username = ""; userId = 0; isAdmin = false
@@ -185,6 +226,7 @@ object AuthSession {
             .remove("session_admin")
             .remove("session_kdf")
             .remove("session_vault_ver")
+            .remove("session_master_key")
             .apply()
     }
 
