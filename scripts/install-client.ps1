@@ -7,10 +7,11 @@
 #   1. 下载最新 moxian-gui.exe + wintun.dll 到 C:\Program Files\moxian-p2p\
 #   2. 询问服务器 URL / 邮箱 / 密码 / 节点名
 #   3. 写 client.yaml（仅 v2 登录字段 GUI 启动时自动登录拉 P2P 配置）
-#   4. 创建桌面快捷方式（带管理员标记） 注册"Windows 登录后自启"任务
-#   5. 立即启动 moxian-gui
+#   4. 创建桌面快捷方式（带管理员标记）
+#   5. 提示用户双击桌面图标启动
 #
 # 重新运行 = 升级 binary（凭据保留）
+# 安装脚本不再注册开机自启任务 不自动启动 GUI 用户手动控制
 
 $ErrorActionPreference = "Stop"
 
@@ -73,8 +74,12 @@ function Get-YamlValue($path, $key) {
     $line = Get-Content $path | Where-Object { $_ -match "^\s*$key\s*:" } | Select-Object -First 1
     if (-not $line) { return "" }
     $val = ($line -split ":", 2)[1].Trim()
-    # 去引号
-    if ($val.StartsWith('"') -and $val.EndsWith('"')) { $val = $val.Substring(1, $val.Length - 2) }
+    # 去引号 + YAML 单引号转义还原（''→'）
+    if ($val.StartsWith('"') -and $val.EndsWith('"')) {
+        $val = $val.Substring(1, $val.Length - 2)
+    } elseif ($val.StartsWith("'") -and $val.EndsWith("'")) {
+        $val = $val.Substring(1, $val.Length - 2) -replace "''", "'"
+    }
     return $val
 }
 
@@ -135,15 +140,17 @@ if ($server.StartsWith("https://")) {
 }
 
 # 写 client.yaml（仅登录凭据 真实 P2P 配置由 GUI 启动时自动从服务器拉）
+# 用 YAML 单引号字符串：仅需把 ' 替换成 ''，不用管 \ 和 "
+function YamlSingle($s) { return "'" + ($s -replace "'", "''") + "'" }
 $yamlContent = @"
 # moxian-p2p 客户端配置
 # 启动时 moxian-gui 用下方凭据登录服务器 自动拉 pass/server/server_udp/virtual_ip
 # 改密码 / 迁服务器：编辑此文件后重启 GUI
 
-server: "$server"
-email: "$email"
-password: "$pwdPlain"
-node: "$node"
+server: $(YamlSingle $server)
+email: $(YamlSingle $email)
+password: $(YamlSingle $pwdPlain)
+node: $(YamlSingle $node)
 insecure_tls: $insecure
 "@
 Set-Content -Path $YAML -Value $yamlContent -Encoding UTF8
@@ -165,42 +172,15 @@ $bytes[0x15] = $bytes[0x15] -bor 0x20
 [System.IO.File]::WriteAllBytes($desktopShortcut, $bytes)
 Ok "桌面快捷方式创建（自动以管理员运行）"
 
-# ---- 4. 注册开机自启计划任务 ----
+# ---- 4. 清理之前装过的开机自启任务（如有 当前版本不再注册自启）----
 $taskName = "moxian-p2p"
-schtasks /Delete /TN $taskName /F 2>$null | Out-Null
-
-$action = New-ScheduledTaskAction -Execute "$INSTALL_DIR\moxian-gui.exe" -WorkingDirectory $INSTALL_DIR
-$trigger = New-ScheduledTaskTrigger -AtLogon -User $env:USERNAME
-$principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Highest
-$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan)
-
-Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger `
-    -Principal $principal -Settings $settings -Force | Out-Null
-Ok "开机自启任务已注册（登录后自动启动）"
-
-# ---- 5. 立刻启动一次（不用等下次登录）----
-Write-Host ""
-Info "立刻启动 moxian-gui..."
-# Stop 旧的（仅当真在跑时 没跑就跳过 不能直接 pipe Get→Stop 空管道会报错）
-$existing = Get-Process -Name "moxian-gui" -ErrorAction SilentlyContinue
-if ($existing) {
-    Info "检测到旧进程 PID=$($existing.Id) 先停掉"
-    $existing | Stop-Process -Force -ErrorAction SilentlyContinue
-    Start-Sleep -Seconds 1
-}
-# Start-Process 已在管理员上下文，新进程继承管理员权限（TUN 需要）
-Start-Process -FilePath "$INSTALL_DIR\moxian-gui.exe" -WorkingDirectory $INSTALL_DIR
-Start-Sleep -Seconds 2
-
-# 检查是否真的起来了
-$proc = Get-Process -Name "moxian-gui" -ErrorAction SilentlyContinue
-if ($proc) {
-    Ok "moxian-gui 已启动 PID=$($proc.Id) 托盘图标应该出现"
-} else {
-    Warn "未检测到进程 可能已自动退出 看 $INSTALL_DIR\moxian.log"
+$existingTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+if ($existingTask) {
+    Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+    Info "已移除旧版的开机自启任务（当前版本不再自启）"
 }
 
-# ---- 6. 完成 ----
+# ---- 5. 完成 ----
 Write-Host ""
 Write-Host "═══════════════════════════════════════════════════════" -ForegroundColor Green
 Write-Host " 🎉 moxian-p2p $tag 安装完成 " -ForegroundColor Green
@@ -211,15 +191,13 @@ Write-Host "  配置文件: $YAML"
 Write-Host "  日志:     $INSTALL_DIR\moxian.log"
 Write-Host "  桌面图标: $desktopShortcut"
 Write-Host ""
-Write-Host "v2 自动模式：" -ForegroundColor Cyan
-Write-Host "  ✅ 托盘图标已出现"
-Write-Host "  ✅ 已用凭据自动登录服务器"
-Write-Host "  ✅ 已拉取 P2P 配置 + 启动连接"
-Write-Host "  ✅ 下次开机/登录自动启动 + 自动连接"
+Write-Host "下一步：" -ForegroundColor Cyan
+Write-Host "  双击桌面 'moxian-p2p' 图标启动（自动以管理员运行）"
+Write-Host "  托盘出现图标后会自动用凭据登录 + 连接 P2P"
 Write-Host ""
 Write-Host "管理：" -ForegroundColor Cyan
 Write-Host "  托盘图标右键 看状态 / 查看日志 / 停止 / 退出"
 Write-Host ""
 Write-Host "升级: 重跑此脚本 (凭据保留)"
-Write-Host "改密码: 编辑 $YAML 然后重启 GUI"
+Write-Host "改密码 / 迁服务器: 编辑 $YAML 然后重启 GUI"
 Write-Host ""
