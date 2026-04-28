@@ -136,6 +136,18 @@ func (c *ConfigAPI) handleNodes(w http.ResponseWriter, r *http.Request) {
 			"virtual_ip": n.VirtualIP,
 		})
 
+	case "DELETE":
+		nodeParam := r.URL.Query().Get("node")
+		if nodeParam == "" {
+			writeErr(w, 400, "node 必填")
+			return
+		}
+		if err := DeleteNode(c.DB, claims.UserID, nodeParam); err != nil {
+			writeErr(w, 500, err.Error())
+			return
+		}
+		writeJSON(w, 200, map[string]any{"ok": true})
+
 	default:
 		writeErr(w, 405, "method not allowed")
 	}

@@ -389,6 +389,22 @@ func ListNodesByUser(db *sql.DB, userID int64) ([]Node, error) {
 	return out, nil
 }
 
+// DeleteNode 删除用户名下指定 node_id（防越权 必须 user_id 匹配）
+func DeleteNode(db *sql.DB, userID int64, nodeID string) error {
+	res, err := db.Exec(
+		"DELETE FROM nodes WHERE user_id = ? AND node_id = ?",
+		userID, nodeID,
+	)
+	if err != nil {
+		return err
+	}
+	rows, _ := res.RowsAffected()
+	if rows == 0 {
+		return errors.New("节点不存在或非此用户")
+	}
+	return nil
+}
+
 func boolToInt(b bool) int {
 	if b {
 		return 1

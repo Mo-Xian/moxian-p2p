@@ -260,11 +260,27 @@ async function refreshNodes() {
       return;
     }
     list.innerHTML = `<table>
-      <thead><tr><th>节点名</th><th>虚拟 IP</th></tr></thead>
+      <thead><tr><th>节点名</th><th>虚拟 IP</th><th>操作</th></tr></thead>
       <tbody>${r.nodes.map(n =>
-        `<tr><td>${escapeHtml(n.NodeID)}</td><td class="code">${n.VirtualIP}</td></tr>`
+        `<tr>
+          <td>${escapeHtml(n.NodeID)}</td>
+          <td class="code">${n.VirtualIP}</td>
+          <td><button class="del-node-btn" data-id="${escapeHtml(n.NodeID)}">🗑️ 删除</button></td>
+        </tr>`
       ).join("")}</tbody>
     </table>`;
+    document.querySelectorAll(".del-node-btn").forEach(b => {
+      b.onclick = async () => {
+        if (!confirm(`删除节点 ${b.dataset.id}？\n（仅清 server 端记录 不影响该设备 APP 配置）`)) return;
+        try {
+          await api("/api/nodes?node=" + encodeURIComponent(b.dataset.id),
+            { method: "DELETE" });
+          await refreshNodes();
+        } catch (e) {
+          alert("删除失败: " + e.message);
+        }
+      };
+    });
   } catch (e) {
     console.error(e);
     if (e.message.includes("token")) logout();

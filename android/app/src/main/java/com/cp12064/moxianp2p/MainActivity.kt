@@ -391,11 +391,17 @@ class MainActivity : AppCompatActivity() {
         binding.advancedSection.visibility = if (showAdvanced) View.VISIBLE else View.GONE
     }
 
-    // autoNodeId 首次使用时自动生成一个唯一 node_id
-    // 比如 "phone-小米13-3F8A" 既容易辨识又避免冲突
+    // autoNodeId 生成稳定 node_id（同 keystore + 同 user 卸载重装结果不变）
+    // 例 "phone-小米13-3F8A"
+    // 后缀 = ANDROID_ID 前 4 位（Android 8+ 是 signing key 派生 卸载重装稳定）
     private fun autoNodeId(): String {
         val model = Build.MODEL.replace(Regex("[^a-zA-Z0-9\u4e00-\u9fa5]"), "").take(10)
-        val suffix = (0..3).map { "0123456789ABCDEF".random() }.joinToString("")
+        val androidId = try {
+            android.provider.Settings.Secure.getString(contentResolver,
+                android.provider.Settings.Secure.ANDROID_ID) ?: ""
+        } catch (_: Exception) { "" }
+        val suffix = if (androidId.length >= 4) androidId.uppercase().take(4)
+                     else (0..3).map { "0123456789ABCDEF".random() }.joinToString("")
         return "phone-$model-$suffix".ifEmpty { "phone-$suffix" }
     }
 
