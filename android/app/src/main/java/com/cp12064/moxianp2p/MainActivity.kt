@@ -454,6 +454,10 @@ class MainActivity : AppCompatActivity() {
         val tvEmpty = findViewById<View>(R.id.tv_empty_services)
         rv.layoutManager = androidx.recyclerview.widget.GridLayoutManager(this, 3)
 
+        // 首次启动自动导入预设 NAS 服务（用户能直接看到 Jellyfin/Immich 等）
+        // 用户改 IP 或删除条目都行 prefs flag 防止删空后又被填回
+        seedDefaultServicesIfNeeded()
+
         val items = NasServiceStore.load(this)
         if (items.isEmpty()) {
             rv.visibility = View.GONE
@@ -469,6 +473,17 @@ class MainActivity : AppCompatActivity() {
         findViewById<Button>(R.id.btn_manage_services).setOnClickListener {
             startActivity(Intent(this, ServiceLauncherActivity::class.java))
         }
+    }
+
+    private fun seedDefaultServicesIfNeeded() {
+        if (prefs.getBoolean("services_seeded", false)) return
+        val toAdd = ServiceTemplates.all
+            .filter { it.defaultUrl.startsWith("http://10.") }  // 跳过"自定义 Web"占位
+            .map { NasService(name = it.name, url = it.defaultUrl, type = it.type) }
+        if (toAdd.isNotEmpty()) {
+            NasServiceStore.save(this, NasServiceStore.load(this) + toAdd)
+        }
+        prefs.edit().putBoolean("services_seeded", true).apply()
     }
 
     private fun setupMenu() {
