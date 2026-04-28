@@ -180,9 +180,12 @@ jobs:
             echo "::notice::secrets 未配置（MOXIAN_RELEASE_URL/MOXIAN_RELEASE_TOKEN）跳过 VPS 推送"
             exit 0
           fi
-          # 长度校验（不暴露内容 防 secret 含奇怪字符比如尾部换行）
+          # GitHub Secrets 粘贴时易带尾部换行/空格 curl 会当字面量导致 URL malformed
+          # 兜底删所有空白（URL/Token 本身不含空白 安全）
+          MOXIAN_RELEASE_URL=$(printf '%s' "$MOXIAN_RELEASE_URL" | tr -d '[:space:]')
+          MOXIAN_RELEASE_TOKEN=$(printf '%s' "$MOXIAN_RELEASE_TOKEN" | tr -d '[:space:]')
           echo "[upload] tag=$TAG URL_LEN=${#MOXIAN_RELEASE_URL} TOKEN_LEN=${#MOXIAN_RELEASE_TOKEN}"
-          # 1. 先 ping 一次健康检查 看连通性
+          # 健康检查 看连通性
           echo "[probe] /healthz"
           curl -ksv -o /dev/null --max-time 15 "$MOXIAN_RELEASE_URL/healthz" 2>&1 | tail -25 || true
           echo "[probe] done"
