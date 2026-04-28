@@ -14,6 +14,8 @@
 # 安装脚本不再注册开机自启任务 不自动启动 GUI 用户手动控制
 
 $ErrorActionPreference = "Stop"
+# 关 progress bar 否则 Invoke-WebRequest 在 PS5 上会慢 50-100 倍
+$ProgressPreference = 'SilentlyContinue'
 
 function Info($m) { Write-Host "[info] $m" -ForegroundColor Cyan }
 function Ok($m)   { Write-Host "[ ok ] $m" -ForegroundColor Green }
@@ -29,7 +31,11 @@ if (-not (Test-Path $INSTALL_DIR)) { New-Item -ItemType Directory -Path $INSTALL
 
 # ---- 1. 拿最新版本号 ----
 Info "查询最新版本..."
-$rel = Invoke-RestMethod "https://api.github.com/repos/Mo-Xian/moxian-p2p/releases/latest"
+try {
+    $rel = Invoke-RestMethod "https://api.github.com/repos/Mo-Xian/moxian-p2p/releases/latest" -TimeoutSec 30
+} catch {
+    Err "查询最新版本失败（网络或代理问题）: $($_.Exception.Message)"
+}
 $tag = $rel.tag_name
 Info "最新: $tag"
 
@@ -51,11 +57,23 @@ if ($installedTag -eq $tag -and $allExist) {
 } else {
     if ($installedTag) { Info "升级 $installedTag → $tag" } else { Info "首次安装 $tag" }
 
+    # 升级前先停掉正在跑的 moxian-gui 否则写 .exe 文件被锁定
+    $running = Get-Process -Name "moxian-gui" -ErrorAction SilentlyContinue
+    if ($running) {
+        Info "检测到 moxian-gui 正在运行 PID=$($running.Id) 先停掉以便升级"
+        $running | Stop-Process -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 2
+    }
+
     function DownloadAsset($name, $dest) {
         $asset = $rel.assets | Where-Object { $_.name -eq $name } | Select-Object -First 1
         if (-not $asset) { Err "Release 没找到 $name" }
         Info "下载 $name → $dest"
-        Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $dest -UseBasicParsing
+        try {
+            Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $dest -UseBasicParsing -TimeoutSec 300
+        } catch {
+            Err "下载 $name 失败: $($_.Exception.Message)"
+        }
     }
 
     DownloadAsset "moxian-gui.exe"        "$INSTALL_DIR\moxian-gui.exe"
