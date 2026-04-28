@@ -180,8 +180,13 @@ jobs:
             echo "::notice::secrets 未配置（MOXIAN_RELEASE_URL/MOXIAN_RELEASE_TOKEN）跳过 VPS 推送"
             exit 0
           fi
-          echo "[upload] $MOXIAN_RELEASE_URL/api/release/ci-upload tag=$TAG"
-          # -k 容忍自签证书
+          # 长度校验（不暴露内容 防 secret 含奇怪字符比如尾部换行）
+          echo "[upload] tag=$TAG URL_LEN=${#MOXIAN_RELEASE_URL} TOKEN_LEN=${#MOXIAN_RELEASE_TOKEN}"
+          # 1. 先 ping 一次健康检查 看连通性
+          echo "[probe] /healthz"
+          curl -ksv -o /dev/null --max-time 15 "$MOXIAN_RELEASE_URL/healthz" 2>&1 | tail -25 || true
+          echo "[probe] done"
+          # 2. 实际推送（-k 容忍自签证书 -v 走 stderr 不污染 HTTP_CODE 抓取）
           HTTP_CODE=$(curl -sk -o /tmp/upload.json -w "%{http_code}" --max-time 300 \
             -H "X-Release-Token: $MOXIAN_RELEASE_TOKEN" \
             -F "tag=$TAG" \
