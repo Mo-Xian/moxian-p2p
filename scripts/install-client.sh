@@ -40,13 +40,25 @@ LATEST_TAG=$(curl -fsSL https://api.github.com/repos/Mo-Xian/moxian-p2p/releases
 [[ -n "$LATEST_TAG" ]] || err "拿不到最新版本"
 info "最新版本: $LATEST_TAG"
 
-BIN_URL="https://github.com/Mo-Xian/moxian-p2p/releases/download/$LATEST_TAG/moxian-client-linux-$ARCH"
-TMP=$(mktemp)
-info "下载 $BIN_URL"
-curl -fSL -o "$TMP" "$BIN_URL"
-install -m 755 "$TMP" /usr/local/bin/moxian-client
-rm -f "$TMP"
-ok "已安装到 /usr/local/bin/moxian-client"
+# 已装版本（一行 tag）
+TAG_FILE=/etc/moxian/.installed_tag
+INSTALLED_TAG=""
+[[ -f "$TAG_FILE" ]] && INSTALLED_TAG=$(cat "$TAG_FILE" | tr -d '[:space:]')
+
+if [[ "$INSTALLED_TAG" == "$LATEST_TAG" && -x /usr/local/bin/moxian-client ]]; then
+  ok "已是最新版 $LATEST_TAG 跳过下载（删除 $TAG_FILE 强制重装）"
+else
+  [[ -n "$INSTALLED_TAG" ]] && info "升级 $INSTALLED_TAG → $LATEST_TAG" || info "首次安装 $LATEST_TAG"
+  BIN_URL="https://github.com/Mo-Xian/moxian-p2p/releases/download/$LATEST_TAG/moxian-client-linux-$ARCH"
+  TMP=$(mktemp)
+  info "下载 $BIN_URL"
+  curl -fSL -o "$TMP" "$BIN_URL"
+  install -m 755 "$TMP" /usr/local/bin/moxian-client
+  rm -f "$TMP"
+  install -d -m 755 /etc/moxian
+  echo "$LATEST_TAG" > "$TAG_FILE"
+  ok "已安装到 /usr/local/bin/moxian-client ($LATEST_TAG)"
+fi
 
 # ---- 收集凭据 ----
 # 每次都问 但显示旧值 回车保留

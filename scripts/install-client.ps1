@@ -32,17 +32,37 @@ $rel = Invoke-RestMethod "https://api.github.com/repos/Mo-Xian/moxian-p2p/releas
 $tag = $rel.tag_name
 Info "最新: $tag"
 
-function DownloadAsset($name, $dest) {
-    $asset = $rel.assets | Where-Object { $_.name -eq $name } | Select-Object -First 1
-    if (-not $asset) { Err "Release 没找到 $name" }
-    Info "下载 $name → $dest"
-    Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $dest -UseBasicParsing
-}
+# 已装版本（写在 INSTALL_DIR\.installed_tag 一行 tag）
+$TAG_FILE = "$INSTALL_DIR\.installed_tag"
+$installedTag = if (Test-Path $TAG_FILE) { (Get-Content $TAG_FILE -Raw).Trim() } else { "" }
 
-DownloadAsset "moxian-gui.exe"        "$INSTALL_DIR\moxian-gui.exe"
-DownloadAsset "moxian-client.exe"     "$INSTALL_DIR\moxian-client.exe"
-DownloadAsset "wintun.dll"            "$INSTALL_DIR\wintun.dll"
-Ok "二进制下载完成"
+# 必要文件齐全 + tag 一致 → 跳过下载
+$REQUIRED_FILES = @(
+    "$INSTALL_DIR\moxian-gui.exe",
+    "$INSTALL_DIR\moxian-client.exe",
+    "$INSTALL_DIR\wintun.dll"
+)
+$allExist = $true
+foreach ($f in $REQUIRED_FILES) { if (-not (Test-Path $f)) { $allExist = $false; break } }
+
+if ($installedTag -eq $tag -and $allExist) {
+    Ok "已是最新版 $tag 跳过下载（删除 $TAG_FILE 强制重装）"
+} else {
+    if ($installedTag) { Info "升级 $installedTag → $tag" } else { Info "首次安装 $tag" }
+
+    function DownloadAsset($name, $dest) {
+        $asset = $rel.assets | Where-Object { $_.name -eq $name } | Select-Object -First 1
+        if (-not $asset) { Err "Release 没找到 $name" }
+        Info "下载 $name → $dest"
+        Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $dest -UseBasicParsing
+    }
+
+    DownloadAsset "moxian-gui.exe"        "$INSTALL_DIR\moxian-gui.exe"
+    DownloadAsset "moxian-client.exe"     "$INSTALL_DIR\moxian-client.exe"
+    DownloadAsset "wintun.dll"            "$INSTALL_DIR\wintun.dll"
+    Set-Content -Path $TAG_FILE -Value $tag -Encoding ASCII
+    Ok "二进制下载完成 $tag"
+}
 
 # ---- 2. 收集凭据（每次都问 但显示默认值 回车保留）----
 $YAML = "$INSTALL_DIR\client.yaml"
