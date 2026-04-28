@@ -206,7 +206,8 @@ object AppUpdater {
         }
 
         nm.notify(NOTIF_ID, build(0, 0, "准备下载..."))
-        android.widget.Toast.makeText(ctx, "开始下载 见通知栏进度", android.widget.Toast.LENGTH_SHORT).show()
+        android.widget.Toast.makeText(ctx, "开始下载 见通知栏 + 主页日志", android.widget.Toast.LENGTH_SHORT).show()
+        ClientController.appendLog("[update] 开始下载 ${release.tag} ${release.apkUrl}")
 
         Thread {
             // 删旧文件（中断后可能有残片）只用 .part 临时文件
@@ -216,6 +217,9 @@ object AppUpdater {
             for (attempt in 1..MAX_RETRIES) {
                 try {
                     val resumeFrom = if (tmp.exists()) tmp.length() else 0L
+                    if (attempt > 1) {
+                        ClientController.appendLog("[update] 重试 #$attempt 从 ${resumeFrom / 1024 / 1024}MB 续传")
+                    }
                     val conn = openConn(release.apkUrl)
                     conn.connectTimeout = 15_000
                     conn.readTimeout = 30_000  // 单次读 30s 卡住就重试
@@ -238,6 +242,7 @@ object AppUpdater {
 
                     var done = if (code == 206) resumeFrom else 0L
                     var lastNotifyAt = 0L
+                    var lastLogPct = -1
                     java.io.FileOutputStream(tmp, code == 206).use { out ->
                         conn.inputStream.use { input ->
                             val buf = ByteArray(64 * 1024)
@@ -255,6 +260,11 @@ object AppUpdater {
                                             (if (attempt > 1) "  (重试 #$attempt)" else "")
                                     else "${done / 1024 / 1024} MB"
                                     nm.notify(NOTIF_ID, build(pct, 100, text))
+                                    // 每 10% 写一次主页日志（防刷屏）
+                                    if (totalSize > 0 && pct >= lastLogPct + 10) {
+                                        lastLogPct = pct
+                                        ClientController.appendLog("[update] $text")
+                                    }
                                 }
                             }
                         }
@@ -264,6 +274,7 @@ object AppUpdater {
                     if (!tmp.renameTo(target)) {
                         throw RuntimeException("rename .part → APK 失败")
                     }
+                    ClientController.appendLog("[update] ✅ 下载完成 ${done / 1024 / 1024}MB → $target")
                     val installIntent = installPendingIntent(ctx, target)
                     main.post {
                         nm.notify(NOTIF_ID,
@@ -280,7 +291,7 @@ object AppUpdater {
                     return@Thread
                 } catch (e: Exception) {
                     lastError = e
-                    // 通知栏显示重试 sleep 后下一轮
+                    ClientController.appendLog("[update] ⚠️ 失败 #$attempt: ${e.javaClass.simpleName}: ${e.message}")
                     main.post {
                         nm.notify(NOTIF_ID, build(0, 0,
                             "网络异常 重试 #${attempt}/${MAX_RETRIES}（${e.javaClass.simpleName}）"))
@@ -290,6 +301,7 @@ object AppUpdater {
             }
 
             // 重试用尽 弹失败 dialog
+            ClientController.appendLog("[update] ❌ 重试 $MAX_RETRIES 次仍失败 放弃")
             main.post {
                 nm.cancel(NOTIF_ID)
                 android.app.AlertDialog.Builder(ctx)
