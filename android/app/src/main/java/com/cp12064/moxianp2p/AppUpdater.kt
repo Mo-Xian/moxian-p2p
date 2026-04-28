@@ -185,16 +185,15 @@ object AppUpdater {
 
     private const val NOTIF_CHANNEL = "moxian_update"
     private const val NOTIF_ID = 9999
+    private const val MAX_RETRIES = 5
 
-    // 用 HttpURLConnection 下载（支持自签证书）+ 通知栏显示进度
-    // 完成后 通知栏可点 触发安装（即使 APP 在后台也能看到）
+    // 用 HttpURLConnection 下载（支持自签证书 + Range 断点续传 + 自动重试）
     private fun manualDownloadAndInstall(ctx: Context, release: Release, target: File) {
         ensureChannel(ctx)
         val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
         val main = android.os.Handler(ctx.mainLooper)
 
-        fun build(progress: Int, total: Int, text: String, intent: android.app.PendingIntent? = null,
-                  ongoing: Boolean = true): android.app.Notification {
+        fun build(progress: Int, total: Int, text: String, ongoing: Boolean = true): android.app.Notification {
             val b = androidx.core.app.NotificationCompat.Builder(ctx, NOTIF_CHANNEL)
                 .setSmallIcon(android.R.drawable.stat_sys_download)
                 .setContentTitle("moxian-p2p ${release.tag}")
@@ -203,7 +202,6 @@ object AppUpdater {
                 .setOngoing(ongoing)
                 .setAutoCancel(!ongoing)
             if (total > 0) b.setProgress(total, progress, false)
-            if (intent != null) b.setContentIntent(intent)
             return b.build()
         }
 
@@ -211,63 +209,97 @@ object AppUpdater {
         android.widget.Toast.makeText(ctx, "开始下载 见通知栏进度", android.widget.Toast.LENGTH_SHORT).show()
 
         Thread {
-            try {
-                val conn = openConn(release.apkUrl)
-                conn.connectTimeout = 15_000
-                conn.readTimeout = 0  // 0 = 不超时（大文件靠 connectTimeout 防卡死即可）
-                if (conn.responseCode !in 200..299) {
-                    throw RuntimeException("HTTP ${conn.responseCode}")
-                }
-                val total = conn.contentLengthLong
-                var done = 0L
-                var lastNotifyAt = 0L
-                target.outputStream().use { out ->
-                    conn.inputStream.use { input ->
-                        val buf = ByteArray(64 * 1024)
-                        while (true) {
-                            val n = input.read(buf)
-                            if (n < 0) break
-                            out.write(buf, 0, n)
-                            done += n
-                            // 限频更新通知（每 500ms 一次）
-                            val now = System.currentTimeMillis()
-                            if (now - lastNotifyAt > 500) {
-                                lastNotifyAt = now
-                                val pct = if (total > 0) ((done * 100) / total).toInt() else 0
-                                val text = if (total > 0) "$pct%  ${done / 1024 / 1024}/${total / 1024 / 1024} MB"
-                                           else "${done / 1024 / 1024} MB"
-                                nm.notify(NOTIF_ID, build(pct, 100, text))
+            // 删旧文件（中断后可能有残片）只用 .part 临时文件
+            val tmp = java.io.File(target.parentFile, target.name + ".part")
+            var lastError: Exception? = null
+
+            for (attempt in 1..MAX_RETRIES) {
+                try {
+                    val resumeFrom = if (tmp.exists()) tmp.length() else 0L
+                    val conn = openConn(release.apkUrl)
+                    conn.connectTimeout = 15_000
+                    conn.readTimeout = 30_000  // 单次读 30s 卡住就重试
+                    if (resumeFrom > 0) {
+                        conn.setRequestProperty("Range", "bytes=$resumeFrom-")
+                    }
+                    val code = conn.responseCode
+                    if (code !in 200..299) throw RuntimeException("HTTP $code")
+
+                    // 总长度：206 时从 Content-Range 解 否则用 Content-Length
+                    val totalSize: Long = if (code == 206) {
+                        conn.getHeaderField("Content-Range")
+                            ?.substringAfter('/')?.toLongOrNull()
+                            ?: (resumeFrom + conn.contentLengthLong)
+                    } else {
+                        // 200 OK 不支持 range 从头来 截断 .part
+                        if (resumeFrom > 0) tmp.delete()
+                        conn.contentLengthLong
+                    }
+
+                    var done = if (code == 206) resumeFrom else 0L
+                    var lastNotifyAt = 0L
+                    java.io.FileOutputStream(tmp, code == 206).use { out ->
+                        conn.inputStream.use { input ->
+                            val buf = ByteArray(64 * 1024)
+                            while (true) {
+                                val n = input.read(buf)
+                                if (n < 0) break
+                                out.write(buf, 0, n)
+                                done += n
+                                val now = System.currentTimeMillis()
+                                if (now - lastNotifyAt > 500) {
+                                    lastNotifyAt = now
+                                    val pct = if (totalSize > 0) ((done * 100) / totalSize).toInt() else 0
+                                    val text = if (totalSize > 0)
+                                        "$pct%  ${done / 1024 / 1024}/${totalSize / 1024 / 1024} MB" +
+                                            (if (attempt > 1) "  (重试 #$attempt)" else "")
+                                    else "${done / 1024 / 1024} MB"
+                                    nm.notify(NOTIF_ID, build(pct, 100, text))
+                                }
                             }
                         }
                     }
+                    // 完整下完 把 .part 改名为正式 APK
+                    if (target.exists()) target.delete()
+                    if (!tmp.renameTo(target)) {
+                        throw RuntimeException("rename .part → APK 失败")
+                    }
+                    val installIntent = installPendingIntent(ctx, target)
+                    main.post {
+                        nm.notify(NOTIF_ID,
+                            androidx.core.app.NotificationCompat.Builder(ctx, NOTIF_CHANNEL)
+                                .setSmallIcon(android.R.drawable.stat_sys_download_done)
+                                .setContentTitle("moxian-p2p ${release.tag} 已下载")
+                                .setContentText("点这里安装 ${done / 1024 / 1024} MB")
+                                .setContentIntent(installIntent)
+                                .setAutoCancel(true)
+                                .setOngoing(false)
+                                .build())
+                        launchInstall(ctx, target)
+                    }
+                    return@Thread
+                } catch (e: Exception) {
+                    lastError = e
+                    // 通知栏显示重试 sleep 后下一轮
+                    main.post {
+                        nm.notify(NOTIF_ID, build(0, 0,
+                            "网络异常 重试 #${attempt}/${MAX_RETRIES}（${e.javaClass.simpleName}）"))
+                    }
+                    try { Thread.sleep(2000L * attempt) } catch (_: InterruptedException) {}
                 }
-                // 下载完 通知栏点一下触发安装（APP 在后台也能用）
-                val installIntent = installPendingIntent(ctx, target)
-                main.post {
-                    nm.notify(NOTIF_ID,
-                        androidx.core.app.NotificationCompat.Builder(ctx, NOTIF_CHANNEL)
-                            .setSmallIcon(android.R.drawable.stat_sys_download_done)
-                            .setContentTitle("moxian-p2p ${release.tag} 已下载")
-                            .setContentText("点这里安装 ${done / 1024 / 1024} MB")
-                            .setContentIntent(installIntent)
-                            .setAutoCancel(true)
-                            .setOngoing(false)
-                            .build())
-                    // 同时直接尝试拉起安装（前台时即时弹出）
-                    launchInstall(ctx, target)
-                }
-            } catch (e: Exception) {
-                main.post {
-                    nm.cancel(NOTIF_ID)
-                    android.app.AlertDialog.Builder(ctx)
-                        .setTitle("下载失败")
-                        .setMessage("${e.javaClass.simpleName}: ${e.message}\n\n" +
-                                "URL: ${release.apkUrl}\n" +
-                                "本地文件: $target")
-                        .setPositiveButton("重试") { _, _ -> downloadAndInstall(ctx, release) }
-                        .setNegativeButton("取消", null)
-                        .show()
-                }
+            }
+
+            // 重试用尽 弹失败 dialog
+            main.post {
+                nm.cancel(NOTIF_ID)
+                android.app.AlertDialog.Builder(ctx)
+                    .setTitle("下载失败（已重试 $MAX_RETRIES 次）")
+                    .setMessage("${lastError?.javaClass?.simpleName}: ${lastError?.message}\n\n" +
+                            "URL: ${release.apkUrl}\n" +
+                            "本地缓存: $tmp（保留 下次自动续传）")
+                    .setPositiveButton("再试一次") { _, _ -> downloadAndInstall(ctx, release) }
+                    .setNegativeButton("取消", null)
+                    .show()
             }
         }.start()
     }
