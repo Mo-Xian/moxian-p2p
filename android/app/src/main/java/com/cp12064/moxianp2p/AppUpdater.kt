@@ -183,37 +183,121 @@ object AppUpdater {
         android.widget.Toast.makeText(ctx, "开始下载 完成后会自动弹安装界面", android.widget.Toast.LENGTH_SHORT).show()
     }
 
-    // 用 HttpURLConnection 下载 支持自签证书 完成后弹安装
-    // 进度通过 Toast 提示开始 + 完成 中间不显示百分比（简化）
+    private const val NOTIF_CHANNEL = "moxian_update"
+    private const val NOTIF_ID = 9999
+
+    // 用 HttpURLConnection 下载（支持自签证书）+ 通知栏显示进度
+    // 完成后 通知栏可点 触发安装（即使 APP 在后台也能看到）
     private fun manualDownloadAndInstall(ctx: Context, release: Release, target: File) {
-        android.widget.Toast.makeText(ctx,
-            "下载中（自签证书 走 APP 内部）...",
-            android.widget.Toast.LENGTH_SHORT).show()
-        // 后台线程下载
+        ensureChannel(ctx)
+        val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+        val main = android.os.Handler(ctx.mainLooper)
+
+        fun build(progress: Int, total: Int, text: String, intent: android.app.PendingIntent? = null,
+                  ongoing: Boolean = true): android.app.Notification {
+            val b = androidx.core.app.NotificationCompat.Builder(ctx, NOTIF_CHANNEL)
+                .setSmallIcon(android.R.drawable.stat_sys_download)
+                .setContentTitle("moxian-p2p ${release.tag}")
+                .setContentText(text)
+                .setOnlyAlertOnce(true)
+                .setOngoing(ongoing)
+                .setAutoCancel(!ongoing)
+            if (total > 0) b.setProgress(total, progress, false)
+            if (intent != null) b.setContentIntent(intent)
+            return b.build()
+        }
+
+        nm.notify(NOTIF_ID, build(0, 0, "准备下载..."))
+        android.widget.Toast.makeText(ctx, "开始下载 见通知栏进度", android.widget.Toast.LENGTH_SHORT).show()
+
         Thread {
             try {
                 val conn = openConn(release.apkUrl)
-                conn.connectTimeout = 8_000
-                conn.readTimeout = 60_000
+                conn.connectTimeout = 15_000
+                conn.readTimeout = 0  // 0 = 不超时（大文件靠 connectTimeout 防卡死即可）
                 if (conn.responseCode !in 200..299) {
                     throw RuntimeException("HTTP ${conn.responseCode}")
                 }
+                val total = conn.contentLengthLong
+                var done = 0L
+                var lastNotifyAt = 0L
                 target.outputStream().use { out ->
-                    conn.inputStream.use { it.copyTo(out) }
+                    conn.inputStream.use { input ->
+                        val buf = ByteArray(64 * 1024)
+                        while (true) {
+                            val n = input.read(buf)
+                            if (n < 0) break
+                            out.write(buf, 0, n)
+                            done += n
+                            // 限频更新通知（每 500ms 一次）
+                            val now = System.currentTimeMillis()
+                            if (now - lastNotifyAt > 500) {
+                                lastNotifyAt = now
+                                val pct = if (total > 0) ((done * 100) / total).toInt() else 0
+                                val text = if (total > 0) "$pct%  ${done / 1024 / 1024}/${total / 1024 / 1024} MB"
+                                           else "${done / 1024 / 1024} MB"
+                                nm.notify(NOTIF_ID, build(pct, 100, text))
+                            }
+                        }
+                    }
                 }
-                // 主线程弹安装
-                android.os.Handler(ctx.mainLooper).post {
-                    android.widget.Toast.makeText(ctx, "下载完成 弹安装...",
-                        android.widget.Toast.LENGTH_SHORT).show()
+                // 下载完 通知栏点一下触发安装（APP 在后台也能用）
+                val installIntent = installPendingIntent(ctx, target)
+                main.post {
+                    nm.notify(NOTIF_ID,
+                        androidx.core.app.NotificationCompat.Builder(ctx, NOTIF_CHANNEL)
+                            .setSmallIcon(android.R.drawable.stat_sys_download_done)
+                            .setContentTitle("moxian-p2p ${release.tag} 已下载")
+                            .setContentText("点这里安装 ${done / 1024 / 1024} MB")
+                            .setContentIntent(installIntent)
+                            .setAutoCancel(true)
+                            .setOngoing(false)
+                            .build())
+                    // 同时直接尝试拉起安装（前台时即时弹出）
                     launchInstall(ctx, target)
                 }
             } catch (e: Exception) {
-                android.os.Handler(ctx.mainLooper).post {
-                    android.widget.Toast.makeText(ctx, "下载失败: ${e.message}",
-                        android.widget.Toast.LENGTH_LONG).show()
+                main.post {
+                    nm.cancel(NOTIF_ID)
+                    android.app.AlertDialog.Builder(ctx)
+                        .setTitle("下载失败")
+                        .setMessage("${e.javaClass.simpleName}: ${e.message}\n\n" +
+                                "URL: ${release.apkUrl}\n" +
+                                "本地文件: $target")
+                        .setPositiveButton("重试") { _, _ -> downloadAndInstall(ctx, release) }
+                        .setNegativeButton("取消", null)
+                        .show()
                 }
             }
         }.start()
+    }
+
+    private fun ensureChannel(ctx: Context) {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+            if (nm.getNotificationChannel(NOTIF_CHANNEL) == null) {
+                val ch = android.app.NotificationChannel(
+                    NOTIF_CHANNEL, "APP 更新",
+                    android.app.NotificationManager.IMPORTANCE_LOW
+                )
+                ch.description = "下载 APK 进度"
+                nm.createNotificationChannel(ch)
+            }
+        }
+    }
+
+    private fun installPendingIntent(ctx: Context, apk: File): android.app.PendingIntent {
+        val uri = androidx.core.content.FileProvider.getUriForFile(
+            ctx, "${ctx.packageName}.fileprovider", apk)
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, "application/vnd.android.package-archive")
+            flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+        val flags = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M)
+            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+        else
+            android.app.PendingIntent.FLAG_UPDATE_CURRENT
+        return android.app.PendingIntent.getActivity(ctx, 0, intent, flags)
     }
 
     private fun launchInstall(ctx: Context, apk: File) {
