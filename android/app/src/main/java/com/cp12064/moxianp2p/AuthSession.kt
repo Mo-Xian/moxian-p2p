@@ -164,7 +164,8 @@ object AuthSession {
     fun lazyFetchVault(ctx: Context): Boolean {
         val ek = encKey ?: return false
         val mk = macKey ?: return false
-        if (decryptedVault?.entries?.isNotEmpty() == true) return true
+        if (decryptedVault?.entries?.isNotEmpty() == true ||
+            decryptedVault?.services?.isNotEmpty() == true) return true
         return try {
             val resp = httpGet(ctx, "/api/vault") ?: return false
             val vaultJson = JSONObject(resp)
@@ -176,6 +177,15 @@ object AuthSession {
                 VaultData.fromJson(plain)
             } else VaultData()
             vaultVersion = ver
+            // vault 里有 services 就同步覆盖本地 NasServiceStore
+            decryptedVault?.services?.takeIf { it.isNotEmpty() }?.let { svcs ->
+                val mapped = svcs.map {
+                    NasService(id = it.id, name = it.name, url = it.url,
+                        type = runCatching { ServiceType.valueOf(it.type) }
+                            .getOrDefault(ServiceType.OTHER))
+                }
+                NasServiceStore.save(ctx, mapped)
+            }
             true
         } catch (_: Exception) { false }
     }
@@ -316,9 +326,10 @@ object AuthSession {
     }
 }
 
-/** Vault 数据结构（解密后的 JSON 对象）*/
+/** Vault 数据结构（解密后的 JSON 对象 schema v2 = services + entries）*/
 data class VaultData(
     val entries: MutableMap<String, VaultEntry> = mutableMapOf(),
+    val services: MutableList<VaultService> = mutableListOf(),
 ) {
     fun put(serviceId: String, entry: VaultEntry) { entries[serviceId] = entry }
     fun get(serviceId: String): VaultEntry? = entries[serviceId]
@@ -334,7 +345,16 @@ data class VaultData(
                 .put("password", v.password)
                 .put("extra", v.extra))
         }
-        obj.put("version", 1)
+        val sarr = org.json.JSONArray()
+        services.forEach { s ->
+            sarr.put(JSONObject()
+                .put("id", s.id)
+                .put("name", s.name)
+                .put("url", s.url)
+                .put("type", s.type))
+        }
+        obj.put("version", 2)
+        obj.put("services", sarr)
         obj.put("entries", arr)
         return obj.toString()
     }
@@ -344,20 +364,39 @@ data class VaultData(
             val out = VaultData()
             try {
                 val obj = JSONObject(json)
-                val arr = obj.optJSONArray("entries") ?: return out
-                for (i in 0 until arr.length()) {
-                    val e = arr.getJSONObject(i)
-                    out.entries[e.optString("service_id")] = VaultEntry(
-                        username = e.optString("username"),
-                        password = e.optString("password"),
-                        extra = e.optString("extra"),
-                    )
+                obj.optJSONArray("entries")?.let { arr ->
+                    for (i in 0 until arr.length()) {
+                        val e = arr.getJSONObject(i)
+                        out.entries[e.optString("service_id")] = VaultEntry(
+                            username = e.optString("username"),
+                            password = e.optString("password"),
+                            extra = e.optString("extra"),
+                        )
+                    }
+                }
+                obj.optJSONArray("services")?.let { arr ->
+                    for (i in 0 until arr.length()) {
+                        val s = arr.getJSONObject(i)
+                        out.services.add(VaultService(
+                            id = s.optString("id"),
+                            name = s.optString("name"),
+                            url = s.optString("url"),
+                            type = s.optString("type", "OTHER"),
+                        ))
+                    }
                 }
             } catch (_: Exception) {}
             return out
         }
     }
 }
+
+data class VaultService(
+    val id: String,
+    val name: String,
+    val url: String,
+    val type: String = "OTHER",
+)
 
 data class VaultEntry(
     val username: String = "",

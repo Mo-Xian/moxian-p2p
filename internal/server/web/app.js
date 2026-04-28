@@ -26,6 +26,118 @@ async function deriveMasterAndHash(password, email, iterations) {
   return { master, hashB64: b64(hash) };
 }
 
+// ---- HKDF-Expand (RFC 5869, Bitwarden 用法 prk 直接当 master key) ----
+async function hkdfExpand(prk, info, length) {
+  const enc = new TextEncoder();
+  const infoBytes = enc.encode(info);
+  const n = Math.ceil(length / 32);
+  const okm = new Uint8Array(length);
+  let t = new Uint8Array(0);
+  let offset = 0;
+  const hmacKey = await crypto.subtle.importKey(
+    "raw", prk, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
+  );
+  for (let i = 1; i <= n; i++) {
+    const input = new Uint8Array(t.length + infoBytes.length + 1);
+    input.set(t, 0);
+    input.set(infoBytes, t.length);
+    input[input.length - 1] = i;
+    const sig = await crypto.subtle.sign("HMAC", hmacKey, input);
+    t = new Uint8Array(sig);
+    const copy = Math.min(32, length - offset);
+    okm.set(t.subarray(0, copy), offset);
+    offset += copy;
+  }
+  return okm;
+}
+
+async function stretchMasterKey(master) {
+  const enc = await hkdfExpand(master, "enc", 32);
+  const mac = await hkdfExpand(master, "mac", 32);
+  return { enc, mac };
+}
+
+// ---- EncString type 2: "2.IV|CT|MAC" ----
+function u8ToB64(u8) { return btoa(String.fromCharCode(...u8)); }
+function b64ToU8(s) { return Uint8Array.from(atob(s), c => c.charCodeAt(0)); }
+
+async function decryptEncString(blob, encKey, macKey) {
+  if (!blob || !blob.startsWith("2.")) return null;
+  const parts = blob.substring(2).split("|");
+  if (parts.length < 3) return null;
+  const iv = b64ToU8(parts[0]);
+  const ct = b64ToU8(parts[1]);
+  const expectedMac = b64ToU8(parts[2]);
+
+  // 验 HMAC
+  const macK = await crypto.subtle.importKey(
+    "raw", macKey, { name: "HMAC", hash: "SHA-256" }, false, ["verify"]
+  );
+  const data = new Uint8Array(iv.length + ct.length);
+  data.set(iv, 0); data.set(ct, iv.length);
+  const ok = await crypto.subtle.verify("HMAC", macK, expectedMac, data);
+  if (!ok) return null;
+
+  // AES-CBC decrypt
+  const aesK = await crypto.subtle.importKey(
+    "raw", encKey, { name: "AES-CBC" }, false, ["decrypt"]
+  );
+  try {
+    const plain = await crypto.subtle.decrypt({ name: "AES-CBC", iv }, aesK, ct);
+    return new TextDecoder().decode(plain);
+  } catch (e) { return null; }
+}
+
+async function encryptToEncString(plain, encKey, macKey) {
+  const iv = crypto.getRandomValues(new Uint8Array(16));
+  const aesK = await crypto.subtle.importKey(
+    "raw", encKey, { name: "AES-CBC" }, false, ["encrypt"]
+  );
+  const ct = new Uint8Array(await crypto.subtle.encrypt(
+    { name: "AES-CBC", iv }, aesK, new TextEncoder().encode(plain)
+  ));
+  const macK = await crypto.subtle.importKey(
+    "raw", macKey, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
+  );
+  const data = new Uint8Array(iv.length + ct.length);
+  data.set(iv, 0); data.set(ct, iv.length);
+  const mac = new Uint8Array(await crypto.subtle.sign("HMAC", macK, data));
+  return `2.${u8ToB64(iv)}|${u8ToB64(ct)}|${u8ToB64(mac)}`;
+}
+
+// ---- Vault: 拉 / 加载 / 保存 ----
+// _masterKey 仅内存 不持久化（login 时设置 logout 时清）
+let _masterKey = null;
+let _vaultVersion = 0;
+
+async function loadVault() {
+  if (!_masterKey) throw new Error("vault locked: 未登录或主密钥已清");
+  const r = await api("/api/vault");
+  _vaultVersion = r.version || 0;
+  const blob = r.encrypted_vault || "";
+  const { enc, mac } = await stretchMasterKey(_masterKey);
+  if (!blob) return { version: 2, services: [], entries: [] };
+  const plain = await decryptEncString(blob, enc, mac);
+  if (plain == null) throw new Error("vault 解密失败 主密码不对？");
+  const data = JSON.parse(plain);
+  // 兼容 v1（仅 entries）
+  if (!data.services) data.services = [];
+  if (!data.entries) data.entries = [];
+  return data;
+}
+
+async function saveVault(data) {
+  if (!_masterKey) throw new Error("vault locked");
+  const { enc, mac } = await stretchMasterKey(_masterKey);
+  data.version = 2;
+  const blob = await encryptToEncString(JSON.stringify(data), enc, mac);
+  const r = await api("/api/vault", {
+    method: "POST",
+    body: JSON.stringify({ encrypted_vault: blob, expected_version: _vaultVersion }),
+  });
+  _vaultVersion = r.version || _vaultVersion + 1;
+}
+
 // ---- API helper ----
 async function api(path, options = {}) {
   const token = localStorage.getItem("moxian_jwt");
@@ -68,10 +180,11 @@ document.getElementById("login-btn").onclick = async () => {
     const pre = await api("/api/auth/prelogin", {
       method: "POST", body: JSON.stringify({ email }),
     });
-    const { hashB64 } = await deriveMasterAndHash(pass, email, pre.kdf_iterations);
+    const { master, hashB64 } = await deriveMasterAndHash(pass, email, pre.kdf_iterations);
     const resp = await api("/api/auth/login", {
       method: "POST", body: JSON.stringify({ email, password_hash: hashB64 }),
     });
+    _masterKey = master;  // 内存保留 用来读写 vault
     localStorage.setItem("moxian_jwt", resp.jwt);
     localStorage.setItem("moxian_user", JSON.stringify({
       id: resp.user_id, username: resp.username, is_admin: resp.is_admin,
@@ -127,6 +240,7 @@ async function loadMain() {
 
   show("view-main");
   await refreshNodes();
+  await refreshVaultUI();
   if (user.is_admin) {
     document.getElementById("admin-card").classList.remove("hidden");
     document.getElementById("users-card").classList.remove("hidden");
@@ -337,9 +451,163 @@ document.getElementById("upload-rel-btn").onclick = async () => {
   }
 };
 
+// ---- Vault: NAS 服务管理 ----
+let _vault = null;  // 解锁后的明文 { version, services: [], entries: [] }
+
+async function refreshVaultUI() {
+  const lockedDiv = document.getElementById("vault-locked");
+  const contentDiv = document.getElementById("vault-content");
+  if (!_masterKey) {
+    lockedDiv.classList.remove("hidden");
+    contentDiv.classList.add("hidden");
+    return;
+  }
+  lockedDiv.classList.add("hidden");
+  contentDiv.classList.remove("hidden");
+  try {
+    _vault = await loadVault();
+    renderServicesList();
+  } catch (e) {
+    document.getElementById("services-list").innerHTML =
+      `<div class="muted">vault 加载失败: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function renderServicesList() {
+  const list = document.getElementById("services-list");
+  const services = _vault.services || [];
+  if (services.length === 0) {
+    list.innerHTML = '<div class="muted">还没有服务 在下面添加</div>';
+    return;
+  }
+  const typeIcon = { VIDEO: "📺", MUSIC: "🎵", PHOTO: "📷", FILE: "📁",
+                     PASSWORD: "🔐", DOWNLOAD: "⬇️", DASHBOARD: "📊", OTHER: "🔗" };
+  list.innerHTML = `<table>
+    <thead><tr><th>服务</th><th>URL</th><th>用户名</th><th>密码</th><th>操作</th></tr></thead>
+    <tbody>${services.map(s => {
+      const cred = (_vault.entries || []).find(e => e.service_id === s.id) || {};
+      const pwdMask = cred.password ? "●●●●●●" : "<span class='muted'>未设</span>";
+      return `<tr>
+        <td>${typeIcon[s.type] || "🔗"} ${escapeHtml(s.name)}</td>
+        <td class="code">${escapeHtml(s.url)}</td>
+        <td>${escapeHtml(cred.username || "")}</td>
+        <td>${pwdMask}</td>
+        <td>
+          <button class="edit-svc-btn" data-id="${escapeHtml(s.id)}">编辑</button>
+          <button class="del-svc-btn" data-id="${escapeHtml(s.id)}">🗑️</button>
+        </td>
+      </tr>`;
+    }).join("")}</tbody>
+  </table>`;
+  document.querySelectorAll(".edit-svc-btn").forEach(b => {
+    b.onclick = () => editService(b.dataset.id);
+  });
+  document.querySelectorAll(".del-svc-btn").forEach(b => {
+    b.onclick = () => deleteService(b.dataset.id);
+  });
+}
+
+async function editService(id) {
+  const s = _vault.services.find(x => x.id === id);
+  if (!s) return;
+  const cred = _vault.entries.find(e => e.service_id === id) || {};
+  const newName = prompt("名称", s.name); if (newName == null) return;
+  const newUrl = prompt("URL", s.url); if (newUrl == null) return;
+  const newUser = prompt("用户名", cred.username || ""); if (newUser == null) return;
+  const newPass = prompt("密码（留空保留）", "");
+  s.name = newName.trim();
+  s.url = newUrl.trim();
+  if (cred.service_id) {
+    cred.username = newUser;
+    if (newPass !== "") cred.password = newPass;
+  } else {
+    _vault.entries.push({
+      service_id: id, username: newUser,
+      password: newPass || "", extra: ""
+    });
+  }
+  try {
+    await saveVault(_vault);
+    renderServicesList();
+  } catch (e) {
+    alert("保存失败: " + e.message);
+  }
+}
+
+async function deleteService(id) {
+  const s = _vault.services.find(x => x.id === id);
+  if (!s) return;
+  if (!confirm(`删除 ${s.name}?`)) return;
+  _vault.services = _vault.services.filter(x => x.id !== id);
+  _vault.entries = _vault.entries.filter(e => e.service_id !== id);
+  try {
+    await saveVault(_vault);
+    renderServicesList();
+  } catch (e) {
+    alert("删除失败: " + e.message);
+  }
+}
+
+document.getElementById("vault-unlock-btn").onclick = async () => {
+  const pwd = document.getElementById("vault-pwd").value;
+  const msg = document.getElementById("vault-unlock-msg");
+  if (!pwd) { msg.textContent = "输主密码"; return; }
+  const user = JSON.parse(localStorage.getItem("moxian_user") || "{}");
+  msg.textContent = "解锁中...";
+  try {
+    const me = await api("/api/auth/me");
+    const pre = await api("/api/auth/prelogin", {
+      method: "POST", body: JSON.stringify({ email: me.email }),
+    });
+    const { master } = await deriveMasterAndHash(pwd, me.email, pre.kdf_iterations);
+    _masterKey = master;
+    document.getElementById("vault-pwd").value = "";
+    msg.textContent = "";
+    await refreshVaultUI();
+  } catch (e) {
+    msg.textContent = "解锁失败: " + e.message;
+  }
+};
+
+document.getElementById("svc-add-btn").onclick = async () => {
+  const msg = document.getElementById("svc-add-msg");
+  const name = document.getElementById("svc-new-name").value.trim();
+  const url = document.getElementById("svc-new-url").value.trim();
+  const type = document.getElementById("svc-new-type").value;
+  const user = document.getElementById("svc-new-user").value;
+  const pass = document.getElementById("svc-new-pass").value;
+  if (!name || !url) { msg.textContent = "名称和 URL 必填"; return; }
+  // 稳定 id：name+url 的简单 hash（两端要一致）
+  const id = await sha1Hex(name + "|" + url);
+  if (_vault.services.some(s => s.id === id)) {
+    msg.textContent = "同名+URL 已存在"; return;
+  }
+  _vault.services.push({ id, name, url, type });
+  if (user || pass) {
+    _vault.entries.push({ service_id: id, username: user, password: pass, extra: "" });
+  }
+  try {
+    await saveVault(_vault);
+    document.getElementById("svc-new-name").value = "";
+    document.getElementById("svc-new-url").value = "";
+    document.getElementById("svc-new-user").value = "";
+    document.getElementById("svc-new-pass").value = "";
+    msg.textContent = "✅ 已添加";
+    renderServicesList();
+  } catch (e) {
+    msg.textContent = "保存失败: " + e.message;
+  }
+};
+
+async function sha1Hex(s) {
+  const h = await crypto.subtle.digest("SHA-1", new TextEncoder().encode(s));
+  return Array.from(new Uint8Array(h)).map(b => b.toString(16).padStart(2,"0")).join("");
+}
+
 // ---- Logout ----
 document.getElementById("logout-btn").onclick = () => logout();
 function logout() {
+  _masterKey = null;
   localStorage.removeItem("moxian_jwt");
   localStorage.removeItem("moxian_user");
   location.reload();

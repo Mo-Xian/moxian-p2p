@@ -114,6 +114,41 @@
       </div>
     </div>
 
+    <!-- NAS 服务管理（含凭据 端到端加密 server 看不到密码）-->
+    <div class="card">
+      <h2>📦 NAS 服务凭据</h2>
+      <div class="muted" style="margin-bottom:8px">
+        服务定义 + 用户名/密码 加密存 vault APP 自动同步 端到端加密
+      </div>
+      <div id="vault-locked" class="hidden">
+        <input type="password" id="vault-pwd" placeholder="主密码（解锁 vault）"/>
+        <button id="vault-unlock-btn">解锁</button>
+        <span id="vault-unlock-msg" class="muted"></span>
+      </div>
+      <div id="vault-content" class="hidden">
+        <div id="services-list"></div>
+        <div style="margin-top:16px; padding:12px; border:1px dashed var(--border); border-radius:6px;">
+          <label>新建服务</label>
+          <select id="svc-new-type">
+            <option value="VIDEO">📺 影视</option>
+            <option value="MUSIC">🎵 音乐</option>
+            <option value="PHOTO">📷 相册</option>
+            <option value="FILE">📁 文件</option>
+            <option value="PASSWORD">🔐 密码</option>
+            <option value="DOWNLOAD">⬇️ 下载</option>
+            <option value="DASHBOARD">📊 面板</option>
+            <option value="OTHER">🔗 其他</option>
+          </select>
+          <input id="svc-new-name" placeholder="名称 例 Jellyfin"/>
+          <input id="svc-new-url" placeholder="URL 例 http://10.88.0.2:8096"/>
+          <input id="svc-new-user" placeholder="用户名（可空 后续填）"/>
+          <input id="svc-new-pass" type="password" placeholder="密码（可空 后续填）"/>
+          <button id="svc-add-btn">添加</button>
+          <div id="svc-add-msg" class="muted"></div>
+        </div>
+      </div>
+    </div>
+
     <!-- 管理员：邀请码 -->
     <div id="admin-card" class="card hidden">
       <h2>🔑 邀请码（管理员）</h2>
