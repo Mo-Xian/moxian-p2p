@@ -174,7 +174,7 @@ func main() {
 
 	(&server.AuthAPI{DB: db, JWT: jwtMgr}).Register(mux)
 	(&server.VaultAPI{DB: db, JWT: jwtMgr}).Register(mux)
-	(&server.ConfigAPI{DB: db, JWT: jwtMgr, ServerWS: publicWS, ServerUDP: publicUDP}).Register(mux)
+	(&server.ConfigAPI{DB: db, JWT: jwtMgr, Hub: sig.Hub, ServerWS: publicWS, ServerUDP: publicUDP}).Register(mux)
 	(&server.AdminAPI{DB: db, JWT: jwtMgr}).Register(mux)
 
 	relDir := *releaseDir

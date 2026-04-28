@@ -259,13 +259,21 @@ async function refreshNodes() {
       list.innerHTML = '<div class="muted">还没有节点 在下面注册第一个</div>';
       return;
     }
+    const fmtOnline = (n) => {
+      if (n.online) {
+        const since = n.online_since ? new Date(n.online_since * 1000).toLocaleString() : "";
+        return `<span style="color:#4caf50">● 在线</span><span class="muted" style="margin-left:6px">${since}</span>`;
+      }
+      return `<span class="muted">○ 离线</span>`;
+    };
     list.innerHTML = `<table>
-      <thead><tr><th>节点名</th><th>虚拟 IP</th><th>操作</th></tr></thead>
+      <thead><tr><th>节点名</th><th>虚拟 IP</th><th>状态</th><th>操作</th></tr></thead>
       <tbody>${r.nodes.map(n =>
         `<tr>
-          <td>${escapeHtml(n.NodeID)}</td>
-          <td class="code">${n.VirtualIP}</td>
-          <td><button class="del-node-btn" data-id="${escapeHtml(n.NodeID)}">🗑️ 删除</button></td>
+          <td>${escapeHtml(n.node_id || n.NodeID)}</td>
+          <td class="code">${n.virtual_ip || n.VirtualIP}</td>
+          <td>${fmtOnline(n)}</td>
+          <td><button class="del-node-btn" data-id="${escapeHtml(n.node_id || n.NodeID)}">🗑️ 删除</button></td>
         </tr>`
       ).join("")}</tbody>
     </table>`;

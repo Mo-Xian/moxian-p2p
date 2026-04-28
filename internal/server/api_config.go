@@ -12,6 +12,7 @@ import (
 type ConfigAPI struct {
 	DB        *sql.DB
 	JWT       *JWTManager
+	Hub       *Hub   // 查节点在线状态
 	ServerWS  string // wss://... 公开的 ws 端点
 	ServerUDP string // host:port 公开的 udp 端点
 }
@@ -109,7 +110,29 @@ func (c *ConfigAPI) handleNodes(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, 500, err.Error())
 			return
 		}
-		writeJSON(w, 200, map[string]any{"nodes": nodes})
+		// 标记在线状态（信令 WS 连接中）
+		online := map[string]int64{}
+		if c.Hub != nil {
+			for _, s := range c.Hub.Snapshot() {
+				online[s.NodeID] = s.OnlineSince
+			}
+		}
+		out := make([]map[string]any, 0, len(nodes))
+		for _, n := range nodes {
+			m := map[string]any{
+				"node_id":     n.NodeID,
+				"virtual_ip":  n.VirtualIP,
+				"tags":        n.Tags,
+				"description": n.Description,
+				"online":      false,
+			}
+			if t, ok := online[n.NodeID]; ok {
+				m["online"] = true
+				m["online_since"] = t
+			}
+			out = append(out, m)
+		}
+		writeJSON(w, 200, map[string]any{"nodes": out})
 
 	case "POST":
 		var body struct {
