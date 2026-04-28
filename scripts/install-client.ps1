@@ -181,9 +181,13 @@ Ok "开机自启任务已注册（登录后自动启动）"
 # ---- 5. 立刻启动一次（不用等下次登录）----
 Write-Host ""
 Info "立刻启动 moxian-gui..."
-# Stop 旧的（重复运行场景）
-Get-Process -Name "moxian-gui" -ErrorAction SilentlyContinue | Stop-Process -Force
-Start-Sleep -Seconds 1
+# Stop 旧的（仅当真在跑时 没跑就跳过 不能直接 pipe Get→Stop 空管道会报错）
+$existing = Get-Process -Name "moxian-gui" -ErrorAction SilentlyContinue
+if ($existing) {
+    Info "检测到旧进程 PID=$($existing.Id) 先停掉"
+    $existing | Stop-Process -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 1
+}
 # Start-Process 已在管理员上下文，新进程继承管理员权限（TUN 需要）
 Start-Process -FilePath "$INSTALL_DIR\moxian-gui.exe" -WorkingDirectory $INSTALL_DIR
 Start-Sleep -Seconds 2
