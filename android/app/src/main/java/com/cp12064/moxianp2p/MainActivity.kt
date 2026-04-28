@@ -92,7 +92,7 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // v2 登录门禁：未登录跳 LoginActivity 未解锁跳 UnlockActivity
+        // 登录门禁：未登录跳 LoginActivity（首次必须）
         if (!AuthSession.isLoggedIn()) {
             if (!AuthSession.restoreFromDisk(this)) {
                 startActivity(Intent(this, LoginActivity::class.java))
@@ -100,14 +100,11 @@ class MainActivity : AppCompatActivity() {
                 return
             }
         }
-        // 后台超时自动锁
+        // 后台超时自动锁（仅清 masterKey JWT 仍有效）
+        // P2P 主功能用 JWT 即可 不再强制 unlock；
+        // vault（NAS 服务凭据）按需在打开服务时再要求解锁
         if (lastPauseAt > 0 && System.currentTimeMillis() - lastPauseAt > AUTO_LOCK_MS) {
             AuthSession.lock()
-        }
-        if (!AuthSession.isUnlocked()) {
-            startActivity(Intent(this, UnlockActivity::class.java))
-            finish()
-            return
         }
 
         binding = ActivityMainBinding.inflate(layoutInflater)
@@ -689,13 +686,10 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        // 恢复时若超时则锁定并跳解锁页
+        // 后台超时仅锁 vault 不强制跳解锁页
+        // P2P 主功能继续可用 进 NAS 服务时再按需弹解锁
         if (lastPauseAt > 0 && System.currentTimeMillis() - lastPauseAt > AUTO_LOCK_MS) {
             AuthSession.lock()
-            if (AuthSession.isLoggedIn() && !AuthSession.isUnlocked()) {
-                startActivity(Intent(this, UnlockActivity::class.java))
-                finish()
-            }
         }
     }
 

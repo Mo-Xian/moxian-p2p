@@ -157,13 +157,22 @@ object ServiceLauncher {
     fun open(ctx: Context, svc: NasService) {
         // 1. 有内置客户端走内置
         builtInActivity(svc)?.let { cls ->
+            // 内置 NAS 客户端从 vault 读凭据 必须先解锁
+            // 未解锁就先跳 UnlockActivity 解锁完再启动目标 Activity
+            if (!AuthSession.isUnlocked()) {
+                val intent = Intent(ctx, UnlockActivity::class.java).apply {
+                    putExtra("post_unlock_class", cls.name)
+                    putExtra("post_unlock_svc_id", svc.id)
+                }
+                try { ctx.startActivity(intent); return } catch (_: Exception) {}
+            }
             val intent = Intent(ctx, cls).apply {
                 putExtra("svc_id", svc.id)
             }
             try { ctx.startActivity(intent); return } catch (_: Exception) {}
         }
 
-        // 2. 未来：Web UI 内嵌（WebViewActivity）
+        // 2. WebView 兜底（不读 vault 不需解锁）
         val intent = Intent(ctx, WebViewActivity::class.java).apply {
             putExtra("svc_id", svc.id)
         }

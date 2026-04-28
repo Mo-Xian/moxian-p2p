@@ -45,7 +45,22 @@ class UnlockActivity : AppCompatActivity() {
                 pb.visibility = View.GONE
                 btnUnlock.isEnabled = true
                 if (ok) {
-                    startActivity(Intent(this@UnlockActivity, MainActivity::class.java))
+                    // 若调用方指定了 unlock 完要跳的 NAS 服务 Activity 走那个
+                    // 否则回主页
+                    val nextCls = intent.getStringExtra("post_unlock_class")
+                    val nextSvcId = intent.getStringExtra("post_unlock_svc_id")
+                    val nextIntent = if (!nextCls.isNullOrBlank()) {
+                        try {
+                            Intent(this@UnlockActivity, Class.forName(nextCls)).apply {
+                                if (!nextSvcId.isNullOrBlank()) putExtra("svc_id", nextSvcId)
+                            }
+                        } catch (_: Exception) {
+                            Intent(this@UnlockActivity, MainActivity::class.java)
+                        }
+                    } else {
+                        Intent(this@UnlockActivity, MainActivity::class.java)
+                    }
+                    startActivity(nextIntent)
                     finish()
                 } else {
                     err.text = "主密码错误 或 JWT 已过期"
