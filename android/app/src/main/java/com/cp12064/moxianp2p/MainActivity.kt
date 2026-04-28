@@ -121,6 +121,8 @@ class MainActivity : AppCompatActivity() {
         }
 
         // 异步检查新版本
+        // 清理已成功安装的旧 APK + 过期 .part
+        AppUpdater.cleanupInstalled(this, BuildConfig.VERSION_NAME)
         checkForUpdate()
 
         binding.btnStartStop.setOnClickListener {

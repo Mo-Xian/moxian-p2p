@@ -361,6 +361,40 @@ object AppUpdater {
         }
     }
 
+    /**
+     * APP 启动时调一次：清理已成功安装的旧 APK 文件 + 7 天前的 .part 残片
+     * 判定"已安装": 当前 BuildConfig.VERSION_NAME >= 文件名里的 tag
+     */
+    fun cleanupInstalled(ctx: Context, currentVersion: String) {
+        try {
+            val dir = ctx.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: return
+            val files = dir.listFiles() ?: return
+            val apkRe = Regex("""^moxian-p2p-v?([\d.]+)\.apk$""")
+            val sevenDaysMs = 7L * 24 * 60 * 60 * 1000
+            val now = System.currentTimeMillis()
+            var deleted = 0
+            for (f in files) {
+                if (f.name.endsWith(".part")) {
+                    if (now - f.lastModified() > sevenDaysMs) {
+                        if (f.delete()) deleted++
+                    }
+                    continue
+                }
+                val m = apkRe.matchEntire(f.name) ?: continue
+                val fileVer = m.groupValues[1]
+                // 当前版本 >= 文件版本 = 已安装可清
+                if (!isNewer(fileVer, currentVersion)) {
+                    if (f.delete()) deleted++
+                }
+            }
+            if (deleted > 0) {
+                ClientController.appendLog("[update] 清理了 $deleted 个已安装/过期的 APK 文件")
+            }
+        } catch (_: Exception) {
+            // 清理失败不影响主流程
+        }
+    }
+
     /** 版本比较 x.y.z 简单按字段 假设数字 */
     private fun isNewer(latest: String, current: String): Boolean {
         val a = latest.split(".", "-").mapNotNull { it.toIntOrNull() }
