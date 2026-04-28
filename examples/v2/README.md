@@ -92,17 +92,13 @@ Remove-Item "C:\Program Files\moxian-p2p" -Recurse -Force
 Remove-Item "$([Environment]::GetFolderPath('Desktop'))\moxian-p2p.lnk"
 ```
 
-## 与 v1 的差异
+## 设计要点
 
-v1 模式（YAML 配置文件）已废弃。如需参考老格式，看 `examples/server.yaml` / `examples/client.yaml`（标记为 LEGACY）。
-
-主要变化：
-
-| v1 | v2 |
-|----|----|
-| 服务端读 YAML | 服务端只用 CLI flags + SQLite |
-| 客户端写 YAML（含 pass/server/udp）| 客户端只填邮箱/密码/服务器 URL |
-| `pass` 双方手抄一致 | 服务器自动生成下发 |
-| 节点 ID 自定 | 服务器自动注册 + 分配 vIP |
-| 无 ACL | 用户系统 + 节点归属 + 邀请码注册 |
-| 凭据明文存盘 | 加密 vault 多端同步（零知识）|
+| 字段 | 说明 |
+|------|------|
+| 服务端配置 | CLI flags + SQLite（`/var/lib/moxian/moxian.db`），不读 YAML |
+| 客户端配置 | 邮箱 / 主密码 / 服务器 URL / 节点名 五字段 |
+| `pass`（mesh 共享密钥）| 服务器自动生成下发，用户感知不到 |
+| 节点 ID | 客户端起一个名字，服务器分配 vIP |
+| ACL | 用户系统 + 节点归属，跨用户不可见 |
+| 凭据存储 | 加密 vault 多端同步（零知识 PBKDF2 + AES-CBC + HMAC）|

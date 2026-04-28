@@ -182,19 +182,13 @@ New-NetFirewallRule -DisplayName "WSL NAS" -Direction Inbound -Action Allow -Pro
 #### A.5 在 WSL 里跑 moxian-p2p
 
 ```bash
-cd ~/nas-test
-wget https://github.com/Mo-Xian/moxian-p2p/releases/latest/download/moxian-client-linux-amd64
-chmod +x moxian-client-linux-amd64
-
-# 从 examples/client.yaml 改一份 改 node_id / server / passphrase
-cp /path/to/moxian-p2p/examples/client.yaml ./client.yaml
-vim client.yaml
-
-# 前台跑 看日志
-./moxian-client-linux-amd64 -config ./client.yaml -v
+# 一键安装（含登录拉配置 + systemd 自启）
+curl -fsSL https://raw.githubusercontent.com/Mo-Xian/moxian-p2p/main/scripts/install-client.sh | sudo bash
+# 询问邮箱 / 主密码 / 节点名 后自动完成
+journalctl -u moxian-client -f
 ```
 
-成功打通后，手机装 moxian-p2p APP，填相同 passphrase + 不同 node_id，即可通过虚拟 IP 访问 WSL 里的 Jellyfin/Immich。
+成功打通后，手机装 moxian-p2p APP，**用同一邮箱 + 主密码登录** 即可通过虚拟 IP 访问 WSL 里的 Jellyfin/Immich。
 
 ### 方案 B：Hyper-V 虚拟机（完整预演）
 
@@ -884,7 +878,7 @@ systemctl status moxian
 - **朋友家有公网的闲置主机**
 - **家里有 IPv6 公网**（家宽电信/联通常送 `/64`）的话，可以一台 NAS 同时兼任 server
 
-信令流量极小（KB/天级别），带宽不是问题。具体 server 部署见 [examples/server.yaml](server.yaml)。
+信令流量极小（KB/天级别），带宽不是问题。一键 server 部署见 [scripts/install-server.sh](../scripts/install-server.sh)。
 
 ---
 

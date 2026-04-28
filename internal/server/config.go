@@ -20,9 +20,6 @@ type FileConfig struct {
 	TLSCert string `yaml:"tls_cert"`
 	TLSKey  string `yaml:"tls_key"`
 
-	AdminUser string `yaml:"admin_user"`
-	AdminPass string `yaml:"admin_pass"`
-
 	RelayLimit string `yaml:"relay_limit"` // per-session 中继限速 如 "10MB"
 
 	// 虚拟网子网 例如 "10.88.0.0/24" 留空则不启用 vIP 自动分配

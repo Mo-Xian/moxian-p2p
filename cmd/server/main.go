@@ -24,8 +24,6 @@ func main() {
 	token := flag.String("token", "", "全局认证 token（可选）")
 	tlsCert := flag.String("tls-cert", "", "TLS 证书文件路径（开启则启用 wss）")
 	tlsKey := flag.String("tls-key", "", "TLS 私钥文件路径")
-	adminUser := flag.String("admin-user", "", "Web 管理面板 Basic Auth 用户名（留空=关闭面板）")
-	adminPass := flag.String("admin-pass", "", "Web 管理面板密码")
 	relayLimit := flag.String("relay-limit", "", "中继每 session 限速 例 10MB/s（空=不限）")
 	virtualSubnet := flag.String("virtual-subnet", "", "虚拟网 CIDR 例 10.88.0.0/24（留空=关闭 vIP 自动分配）")
 	vipStore := flag.String("vip-store", "", "vIP 分配持久化文件 例 /var/lib/moxian/vip.json")
@@ -67,12 +65,6 @@ func main() {
 		}
 		if *tlsKey == "" {
 			*tlsKey = fc.TLSKey
-		}
-		if *adminUser == "" {
-			*adminUser = fc.AdminUser
-		}
-		if *adminPass == "" {
-			*adminPass = fc.AdminPass
 		}
 		if *relayLimit == "" {
 			*relayLimit = fc.RelayLimit
@@ -200,12 +192,6 @@ func main() {
 	log.Printf("[v2] auth / vault / config / admin / release API enabled")
 	log.Printf("[v2] web panel at http(s)://%s%s/", *publicHost, *wsAddr)
 
-	// ---- 老的 admin 面板 兼容保留（用 env MOXIAN_ADMIN_LEGACY=1 启用）----
-	if os.Getenv("MOXIAN_ADMIN_LEGACY") == "1" && *adminUser != "" && *adminPass != "" {
-		admin := &server.AdminPanel{Hub: sig.Hub, Relay: udp, User: *adminUser, Pass: *adminPass}
-		admin.Register(mux)
-		log.Printf("[admin] legacy panel enabled at /admin (user=%s)", *adminUser)
-	}
 	server.RegisterMetrics(mux, sig.Hub, udp)
 	log.Printf("[metrics] Prometheus endpoint /metrics")
 
