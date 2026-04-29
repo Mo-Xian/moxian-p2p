@@ -7,7 +7,7 @@ import android.net.VpnService
 /**
  * 基于 Android VpnService 的 TUN 实现
  * 工作流程：
- *   Builder.addAddress(vip, 24) + addRoute(10.88.0.0, 24) + establish() → tun fd
+ *   Builder.addAddress(vip, 24) + addRoute(10.88.0.0, 16) + establish() → tun fd
  *   把 fd 传给 Go 侧（ClientController.start），Go 代码通过 wireguard/tun.CreateFromFD 复用
  *
  * 注意：VpnService 在 establish() 后 Android 自动将其视为前台服务 不需要 startForeground()
@@ -44,14 +44,15 @@ class MoxianVpnService : VpnService() {
     }
 
     private fun buildVpn(vip: String): Int? {
-        // 关键：只 addRoute("10.88.0.0", 24) 让虚拟网流量走 VPN
+        // 关键：addRoute("10.88.0.0", 16) 覆盖 server allocator 全部分配空间 (10.88.<uid%256>.X)
+        // VpnService 不会从 addAddress 派生路由 必须显式 addRoute 否则跨 /24 的对端 vIP 走物理网卡
         // 其他目的（包括 server 公网 IP/STUN/打洞 peer 的公网 IP）默认走物理网卡 不会形成死循环
-        // 因此无需 addDisallowedApplication（那会把本 APP 所有流量都排除 包括测试按钮发给 10.88.0.X 的 HTTP）
+        // 因此无需 addDisallowedApplication（那会把本 APP 所有流量都排除 包括测试按钮发给虚拟 IP 的 HTTP）
         val builder = Builder()
             .setSession("moxian-p2p")
             .setMtu(1400)
             .addAddress(vip, 24)
-            .addRoute("10.88.0.0", 24)
+            .addRoute("10.88.0.0", 16)
 
         val pfd = builder.establish() ?: return null
         return pfd.detachFd()

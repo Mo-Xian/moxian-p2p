@@ -279,7 +279,7 @@ class MainActivity : AppCompatActivity() {
     // ---- 测试按钮 ----
     // 优先: forward 规则第一条的 local 地址
     // 否则: 从日志里最近看到的对端 vIP 猜一个 (默认 :80 可手动改)
-    // 最后兜底: 10.88.0.2:80
+    // 最后兜底: 输入框 vIP 同子网 .1
     private fun runTest() {
         val rules = parseForwards(binding.etForwards.text.toString())
         val defaultTarget: String = when {
@@ -289,7 +289,7 @@ class MainActivity : AppCompatActivity() {
             }
             else -> {
                 // TUN 模式 从日志里找对端 vIP
-                val peerVip = lastSeenPeerVip() ?: "10.88.0.2"
+                val peerVip = lastSeenPeerVip() ?: fallbackPeerHint()
                 "http://$peerVip:80/"
             }
         }
@@ -300,11 +300,18 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun lastSeenPeerVip(): String? {
-        // 从日志文本里找 "vip=10.88.0.X" (非自己的 vIP)
+        // server 按 uid%256 分配 /24 不能写死 10.88.0.X 通配 10.X.X.X 取首个非自己
         val self = binding.etVip.text.toString().trim()
-        val pattern = Regex("""vip=(10\.88\.0\.\d+)""")
+        val pattern = Regex("""vip=(10\.\d+\.\d+\.\d+)""")
         val hits = pattern.findAll(binding.tvLog.text.toString()).map { it.groupValues[1] }.toSet()
         return hits.firstOrNull { it != self && it != "auto" }
+    }
+
+    // 还没看到任何对端时 用本机 vIP 同 /24 的 .1 兜底（仅作输入框默认 提示用户改）
+    private fun fallbackPeerHint(): String {
+        val self = binding.etVip.text.toString().trim()
+        val parts = self.split(".")
+        return if (parts.size == 4) "${parts[0]}.${parts[1]}.${parts[2]}.1" else "10.88.0.1"
     }
 
     private fun promptTestUrl(default: String, onConfirm: (String) -> Unit) {

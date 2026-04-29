@@ -51,6 +51,8 @@ enum class ServiceType(val label: String, val emoji: String) {
 }
 
 // 预设模板 用户新建时可一键填充 剩下只需改 IP:PORT
+// URL 中的 {peer} 会在导入时按当前发现的对端 vIP 替换 否则保留占位符提示用户编辑
+// server 按 uid%256 给每个用户分配独立 /24 vIP 不能写死 10.88.0.2
 data class ServiceTemplate(
     val name: String,
     val defaultUrl: String,
@@ -58,15 +60,17 @@ data class ServiceTemplate(
 )
 
 object ServiceTemplates {
+    const val PEER_PLACEHOLDER = "{peer}"
+
     val all: List<ServiceTemplate> = listOf(
-        ServiceTemplate("Jellyfin 影视",   "http://10.88.0.2:8096",  ServiceType.VIDEO),
-        ServiceTemplate("Navidrome 音乐",  "http://10.88.0.2:4533",  ServiceType.MUSIC),
-        ServiceTemplate("Immich 相册",     "http://10.88.0.2:2283",  ServiceType.PHOTO),
-        ServiceTemplate("qBittorrent",     "http://10.88.0.2:8081",  ServiceType.DOWNLOAD),
-        ServiceTemplate("Vaultwarden 密码","http://10.88.0.2:8080",  ServiceType.PASSWORD),
-        ServiceTemplate("Syncthing",       "http://10.88.0.2:8384",  ServiceType.FILE),
-        ServiceTemplate("AdGuard Home",    "http://10.88.0.2:3000",  ServiceType.DASHBOARD),
-        ServiceTemplate("自定义 Web",       "http://",                ServiceType.OTHER),
+        ServiceTemplate("Jellyfin 影视",   "http://{peer}:8096",  ServiceType.VIDEO),
+        ServiceTemplate("Navidrome 音乐",  "http://{peer}:4533",  ServiceType.MUSIC),
+        ServiceTemplate("Immich 相册",     "http://{peer}:2283",  ServiceType.PHOTO),
+        ServiceTemplate("qBittorrent",     "http://{peer}:8081",  ServiceType.DOWNLOAD),
+        ServiceTemplate("Vaultwarden 密码","http://{peer}:8080",  ServiceType.PASSWORD),
+        ServiceTemplate("Syncthing",       "http://{peer}:8384",  ServiceType.FILE),
+        ServiceTemplate("AdGuard Home",    "http://{peer}:3000",  ServiceType.DASHBOARD),
+        ServiceTemplate("自定义 Web",       "http://",             ServiceType.OTHER),
     )
 }
 

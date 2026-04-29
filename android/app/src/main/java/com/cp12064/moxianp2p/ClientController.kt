@@ -107,4 +107,24 @@ object ClientController {
     fun appendLog(line: String) {
         scope.launch { _logs.emit(line) }
     }
+
+    // 从最近日志的 [discovery] 行里抽对端 vIP（排除自己的）
+    // server 按 uid%256 给每用户分独立 /24 不能写死任何固定子网 必须扫日志
+    fun lastSeenPeerVip(): String? {
+        val cache = _logs.replayCache
+        // 自己 vIP 出现在 "[client] assigned vip = X" 或 "[tun] device=... vip=X"
+        val selfRe = Regex("""(?:assigned vip\s*=\s*|vip=)(10\.\d+\.\d+\.\d+)""")
+        val self = cache.asReversed().firstNotNullOfOrNull { line ->
+            if ("[tun] device=" in line || "assigned vip" in line) {
+                selfRe.find(line)?.groupValues?.getOrNull(1)
+            } else null
+        }
+        // discovery 行里抽全部 vIP 取第一个非自己
+        val peerRe = Regex("""vip=(10\.\d+\.\d+\.\d+)""")
+        val peers = cache.asSequence()
+            .filter { "[discovery]" in it }
+            .flatMap { peerRe.findAll(it).map { m -> m.groupValues[1] } }
+            .toSet()
+        return peers.firstOrNull { it != self }
+    }
 }

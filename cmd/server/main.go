@@ -195,17 +195,36 @@ func main() {
 	server.RegisterMetrics(mux, sig.Hub, udp)
 	log.Printf("[metrics] Prometheus endpoint /metrics")
 
+	srv := &http.Server{
+		Addr:    *wsAddr,
+		Handler: mux,
+		// 过滤公网扫描器（Censys/Shodan/ZGrab 等）打出的 TLS 握手噪声 真正的错误照常走
+		ErrorLog: log.New(&httpErrorFilter{}, "", log.LstdFlags),
+	}
+
 	if *tlsCert != "" && *tlsKey != "" {
 		log.Printf("[wss] listen %s (wss://%s:PORT/ws)", *wsAddr, *publicHost)
-		if err := http.ListenAndServeTLS(*wsAddr, *tlsCert, *tlsKey, mux); err != nil {
+		if err := srv.ListenAndServeTLS(*tlsCert, *tlsKey); err != nil {
 			log.Printf("https: %v", err)
 			os.Exit(1)
 		}
 		return
 	}
 	log.Printf("[ws] listen %s  (ws://%s:PORT/ws)", *wsAddr, *publicHost)
-	if err := http.ListenAndServe(*wsAddr, mux); err != nil {
+	if err := srv.ListenAndServe(); err != nil {
 		log.Printf("http: %v", err)
 		os.Exit(1)
 	}
+}
+
+// httpErrorFilter 丢弃 net/http 来自公网扫描器的 TLS 握手噪声
+// 这些行不影响功能 仅是日志噪声 影响真正错误的可读性
+type httpErrorFilter struct{}
+
+func (httpErrorFilter) Write(p []byte) (int, error) {
+	s := string(p)
+	if strings.Contains(s, "http: TLS handshake error from") {
+		return len(p), nil
+	}
+	return os.Stderr.Write(p)
 }

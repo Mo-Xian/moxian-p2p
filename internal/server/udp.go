@@ -186,6 +186,13 @@ func (u *UDPServer) handleBind(pkt []byte, remote *net.UDPAddr) {
 		sess.sides[0] = remote
 	case sess.sides[1] == nil && !udpAddrEqual(sess.sides[0], remote):
 		sess.sides[1] = remote
+	case udpAddrEqual(sess.sides[0], remote) || udpAddrEqual(sess.sides[1], remote):
+		// 已存在 无需更新
+	case sess.sides[0] != nil && sess.sides[0].IP.Equal(remote.IP):
+		// NAT 端口漂移 同 IP 不同 port 视为同一端 刷新映射
+		sess.sides[0] = remote
+	case sess.sides[1] != nil && sess.sides[1].IP.Equal(remote.IP):
+		sess.sides[1] = remote
 	}
 	sess.lastSeen = time.Now()
 	sess.mu.Unlock()
@@ -215,6 +222,14 @@ func (u *UDPServer) handleData(pkt []byte, remote *net.UDPAddr) {
 	case udpAddrEqual(sess.sides[0], remote):
 		target = sess.sides[1]
 	case udpAddrEqual(sess.sides[1], remote):
+		target = sess.sides[0]
+	case sess.sides[0] != nil && sess.sides[0].IP.Equal(remote.IP):
+		// NAT 端口漂移 同 IP 自动刷新 sides[0] 的 port 避免 60s 后 keepalive 失效
+		// sid 是 128bit 随机 外人猜不到 仅在 active 会话内允许该自适应
+		sess.sides[0] = remote
+		target = sess.sides[1]
+	case sess.sides[1] != nil && sess.sides[1].IP.Equal(remote.IP):
+		sess.sides[1] = remote
 		target = sess.sides[0]
 	}
 	if target == nil {

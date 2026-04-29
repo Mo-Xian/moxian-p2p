@@ -158,14 +158,20 @@ class ServiceLauncherActivity : AppCompatActivity() {
             .show()
     }
 
-    // 让用户勾选要导入哪些预设模板 基于虚拟 IP 10.88.0.2 批量创建
+    // 让用户勾选要导入哪些预设模板 模板里的 {peer} 用日志抽到的对端 vIP 替换
     private fun showImportTemplatesDialog() {
+        val peerVip = ClientController.lastSeenPeerVip()
         val templates = ServiceTemplates.all.filter { it.name != "自定义 Web" }
-        val labels = templates.map { "${it.type.emoji} ${it.name}  ${it.defaultUrl}" }.toTypedArray()
+        val displayUrl: (ServiceTemplate) -> String = { tpl ->
+            if (peerVip != null) tpl.defaultUrl.replace(ServiceTemplates.PEER_PLACEHOLDER, peerVip)
+            else tpl.defaultUrl
+        }
+        val labels = templates.map { "${it.type.emoji} ${it.name}  ${displayUrl(it)}" }.toTypedArray()
         val checked = BooleanArray(templates.size) { true }
 
+        val title = if (peerVip != null) "选择要导入的服务（IP=$peerVip）" else "选择要导入的服务"
         AlertDialog.Builder(this)
-            .setTitle("选择要导入的服务")
+            .setTitle(title)
             .setMultiChoiceItems(labels, checked) { _, which, isChecked ->
                 checked[which] = isChecked
             }
@@ -173,14 +179,16 @@ class ServiceLauncherActivity : AppCompatActivity() {
                 val existing = NasServiceStore.load(this)
                 val toAdd = templates.filterIndexed { idx, _ -> checked[idx] }
                     .filter { tpl -> existing.none { it.name == tpl.name } }
-                    .map { NasService(name = it.name, url = it.defaultUrl, type = it.type) }
+                    .map { NasService(name = it.name, url = displayUrl(it), type = it.type) }
                 if (toAdd.isEmpty()) {
                     toast("没有需要新增的服务")
                     return@setPositiveButton
                 }
                 NasServiceStore.save(this, existing + toAdd)
                 reload()
-                toast("已导入 ${toAdd.size} 个服务 建议点\"编辑\"调整为你的实际 IP")
+                val tip = if (peerVip != null) "已导入 ${toAdd.size} 个服务"
+                else "已导入 ${toAdd.size} 个服务 模板包含 {peer} 占位符 请编辑成对端实际 vIP"
+                toast(tip)
             }
             .setNegativeButton("取消", null)
             .show()
